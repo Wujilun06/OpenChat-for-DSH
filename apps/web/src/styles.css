@@ -1,0 +1,301 @@
+:root {
+  --oc-bg: #ededed;
+  --oc-panel: #f7f7f7;
+  --oc-bubble-peer: #ffffff;
+  --oc-bubble-me: #95ec69;
+  --oc-text: #191919;
+  --oc-sub: #7a7a7a;
+  --oc-line: #dcdcdc;
+  --oc-green: #95ec69;
+  --oc-link: #576b95;
+  --oc-danger: #cf3b3b;
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--oc-bg);
+  color: var(--oc-text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+
+/* 启动那一瞬间 */
+.splash {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  color: var(--oc-sub);
+  letter-spacing: 0.2em;
+}
+
+/* ---------- 登录 ---------- */
+.login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 24px;
+}
+
+.login-logo {
+  width: 88px;
+  height: 88px;
+  border-radius: 22px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.login h1 {
+  margin: 18px 0 4px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.login-sub {
+  margin: 0 0 28px;
+  font-size: 13px;
+  color: var(--oc-sub);
+}
+
+.login form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.login input {
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--oc-line);
+  border-radius: 10px;
+  background: #fff;
+  /* 16px 是 iOS 不缩放输入框的门槛 */
+  font-size: 16px;
+  outline: none;
+}
+
+.login input:focus {
+  border-color: var(--oc-green);
+}
+
+.login button[type='submit'] {
+  height: 48px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--oc-green);
+  color: #111;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.login button[type='submit']:disabled {
+  background: #d8d8d8;
+  color: #999;
+}
+
+.login-error {
+  min-height: 18px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--oc-danger);
+}
+
+/* ---------- 聊天 ---------- */
+.chat {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--oc-bg);
+}
+
+.chat-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: env(safe-area-inset-top) 8px 0;
+  min-height: calc(48px + env(safe-area-inset-top));
+  background: var(--oc-bg);
+  border-bottom: 1px solid var(--oc-line);
+}
+
+.chat-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 68%;
+  margin: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-actions {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #333;
+}
+
+.icon-btn:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  min-height: 240px;
+  color: var(--oc-sub);
+}
+
+.empty-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+}
+
+.empty-title {
+  margin: 10px 0 0;
+  font-size: 15px;
+  color: #555;
+}
+
+.empty-hint {
+  margin: 0;
+  font-size: 13px;
+}
+
+.link {
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  color: var(--oc-link);
+  font-size: 13px;
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  flex: none;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--oc-panel);
+  border-top: 1px solid var(--oc-line);
+}
+
+.composer .tool {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #444;
+}
+
+.composer .tool:disabled {
+  color: #bdbdbd;
+}
+
+.composer .text {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 16px;
+  outline: none;
+}
+
+.composer .send {
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--oc-green);
+  color: #111;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.composer .send:disabled {
+  background: #d8d8d8;
+  color: #999;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(72px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}

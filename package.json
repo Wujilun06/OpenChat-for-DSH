@@ -1,0 +1,27 @@
+{
+  "name": "openchat",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A small web chat that can later be dropped into a bigger panel.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @openchat/shared && concurrently -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w @openchat/server",
+    "dev:web": "npm run dev -w @openchat/web",
+    "build": "npm run build -w @openchat/shared && npm run build -w @openchat/server && npm run build -w @openchat/web",
+    "start": "npm run start -w @openchat/server",
+    "test": "npm run test -w @openchat/server",
+    "typecheck": "npm run build -w @openchat/shared && npm run typecheck -w @openchat/web && npm run typecheck -w @openchat/server",
+    "icons": "python scripts/gen-icons.py"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}
