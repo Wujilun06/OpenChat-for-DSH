@@ -3,8 +3,9 @@
 一个自己的网页聊天，最后要能塞进一个更大的面板里。做一个的理由很实在：
 QQ 那条线（NapCat / OneBot）哪天坏了，还能找得到鱼。
 
-现在做到 **P0**：仓库、登录、数据库、PWA 壳、微信风空聊天页。
-聊天本身在 P1。
+现在做到 **P1**：登录、SQLite、PWA 壳、文字聊天（左右气泡、引用回复、
+正在输入、时间戳三档、断线补齐、连发合并）。
+回答现在是 `config.mock` 里的假鱼回声；接上 DSH 之后关掉它就行。
 
 ## 快速开始
 
@@ -27,6 +28,9 @@ npm start            # 只开 :8787，前端从 apps/web/dist 出
 
 密码、端口、对方昵称头像都在 `config.json`，这个文件**不进 git**（`.gitignore` 里）。
 字段含义见 `config.example.json`。
+
+`mock` 那几项是假鱼回声：`enabled` 关掉就没人回话了；
+`mergeWindowMs` 是连发合并窗口（默认 2000）；`typingMs` 是「正在输入」多久后出字。
 
 `dataDir` 默认是仓库下的 `data/`，里面会有 `openchat.db`、`stickers/`、`thumbs/`。
 
@@ -54,5 +58,5 @@ scripts/         图标生成、开机自启
 
 ## 里程碑
 
-P0 骨架 → P1 文字聊天 → P2 表情 → P3 语音（转写，不存音频）→ P4 通话占位 → P5 接 DSH。
+P0 骨架 ✅ → P1 文字聊天 ✅ → P2 表情 → P3 语音（转写，不存音频）→ P4 通话占位 → P5 接 DSH。
 细节和验收标准在 [docs/milestones.md](docs/milestones.md)。

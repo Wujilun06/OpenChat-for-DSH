@@ -190,18 +190,187 @@ button {
 
 .messages {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 12px;
+  padding: 14px 12px;
+}
+
+.older-hint {
+  padding: 4px 0;
+  color: var(--oc-sub);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ---------- 一条消息 ---------- */
+.msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.msg.me {
+  justify-content: flex-end;
+}
+
+.msg-avatar {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.me-avatar {
+  display: grid;
+  place-items: center;
+  background: #d6e8ff;
+  color: #3d5a80;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.msg-body {
+  display: flex;
+  flex-direction: column;
+  max-width: 72%;
+  min-width: 0;
+}
+
+.msg.me .msg-body {
+  align-items: flex-end;
+}
+
+.msg-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 0 2px;
+  font-size: 11px;
+  color: var(--oc-sub);
+}
+
+.msg-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--oc-sub);
+  font-size: 11px;
+}
+
+.msg-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.bubble {
+  position: relative;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--oc-bubble-peer);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+}
+
+.msg.me .bubble {
+  background: var(--oc-bubble-me);
+}
+
+/* 微信那种小尾巴 */
+.msg.fish .bubble::after,
+.msg.me .bubble::after {
+  content: '';
+  position: absolute;
+  top: 13px;
+  width: 0;
+  height: 0;
+  border: 6px solid transparent;
+}
+
+.msg.fish .bubble::after {
+  left: -11px;
+  border-right-color: var(--oc-bubble-peer);
+}
+
+.msg.me .bubble::after {
+  right: -11px;
+  border-left-color: var(--oc-bubble-me);
+}
+
+.bubble-text {
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.quote {
+  max-width: 100%;
+  margin-bottom: 6px;
+  padding: 4px 6px;
+  overflow: hidden;
+  border-radius: 4px;
+  border-left: 3px solid rgba(0, 0, 0, 0.14);
+  background: rgba(0, 0, 0, 0.05);
+  color: #666;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg.me .quote {
+  border-left-color: rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.07);
+  color: #35551f;
+}
+
+.conn-banner {
+  flex: none;
+  padding: 6px 12px;
+  background: #fdf1d6;
+  color: #8a6a1f;
+  font-size: 12px;
+  text-align: center;
+}
+
+.chat-title.typing {
+  color: #4c8b4c;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.chat-menu {
+  position: absolute;
+  top: calc(50px + env(safe-area-inset-top));
+  right: 10px;
+  z-index: 20;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+}
+
+.chat-menu button {
+  display: block;
+  width: 100%;
+  padding: 12px 18px;
+  border: 0;
+  background: none;
+  font-size: 15px;
+  text-align: left;
+  white-space: nowrap;
 }
 
 .empty {
   display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 100%;
   min-height: 240px;
   color: var(--oc-sub);
 }
@@ -233,12 +402,46 @@ button {
 
 .composer {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: 6px;
   flex: none;
   padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
   background: var(--oc-panel);
   border-top: 1px solid var(--oc-line);
+}
+
+.composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #ececec;
+  color: #555;
+  font-size: 12px;
+}
+
+.reply-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: none;
+  color: #777;
 }
 
 .composer .tool {
@@ -260,13 +463,17 @@ button {
 .composer .text {
   flex: 1;
   min-width: 0;
-  height: 36px;
-  padding: 0 10px;
+  min-height: 36px;
+  max-height: 120px;
+  padding: 8px 10px;
+  overflow-y: auto;
   border: 0;
   border-radius: 8px;
   background: #fff;
   font-size: 16px;
+  line-height: 20px;
   outline: none;
+  resize: none;
 }
 
 .composer .send {

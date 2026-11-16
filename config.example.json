@@ -16,5 +16,11 @@
   "sticker": {
     "maxBytes": 5242880,
     "maxCount": 100
+  },
+  "mock": {
+    "enabled": true,
+    "mergeWindowMs": 2000,
+    "typingMs": 1200,
+    "gapMs": 700
   }
 }

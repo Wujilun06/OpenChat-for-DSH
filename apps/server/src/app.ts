@@ -10,8 +10,10 @@ import type {
   HealthInfo,
   LoginResult,
   MeResult,
+  MessagesResult,
   PeerInfo,
 } from '@openchat/shared'
+import { LIMITS } from '@openchat/shared'
 import type { AppConfig, AppPaths } from './config.js'
 import {
   LoginGuard,
@@ -21,6 +23,9 @@ import {
   revokeSession,
   verifySession,
 } from './auth.js'
+import { Hub } from './services/hub.js'
+import { createMessage, findMessage, listBefore, listSince } from './services/messages.js'
+import { MockFish } from './services/mockFish.js'
 
 export const APP_VERSION = '0.1.0'
 
@@ -168,6 +173,174 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
     return result
   })
 
+  // ── 会话、消息、推送 ───────────────────────────────────────────────
+  const convId = (db
+    .prepare('SELECT id FROM conversations ORDER BY created_at LIMIT 1')
+    .get() as { id: string } | undefined)?.id
+  if (!convId) throw new Error('数据库里没有会话，seed 没跑成功')
+
+  const hub = new Hub()
+  const mock = new MockFish({ db, hub, convId, config: config.mock })
+
+  const parseLimit = (raw: unknown, fallback: number): number => {
+    const n = Number(raw)
+    if (!Number.isFinite(n)) return fallback
+    return Math.min(200, Math.max(1, Math.trunc(n)))
+  }
+
+  app.get('/api/conversation', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    return { ok: true, conversation: conversationOf() }
+  })
+
+  app.get('/api/messages', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    const query = (req.query ?? {}) as Record<string, unknown>
+    const limit = parseLimit(query.limit, 50)
+
+    if (query.since !== undefined) {
+      const since = Number(query.since)
+      if (!Number.isFinite(since) || since < 0) {
+        return fail(reply, 400, 'bad_since', 'since 不是个数字')
+      }
+      const result = listSince(db, convId, Math.trunc(since), limit)
+      const body: MessagesResult = { ok: true, items: result.items, hasMore: result.hasMore }
+      return body
+    }
+
+    let before: number | null = null
+    if (query.before !== undefined) {
+      const parsed = Number(query.before)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return fail(reply, 400, 'bad_before', 'before 不是个数字')
+      }
+      before = Math.trunc(parsed)
+    }
+
+    const result = listBefore(db, convId, before, limit)
+    const body: MessagesResult = { ok: true, items: result.items, hasMore: result.hasMore }
+    return body
+  })
+
+  app.post('/api/messages', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const clientId = String(body.clientId ?? '').trim()
+    if (!clientId) return fail(reply, 400, 'client_id_required', '要给一个 clientId，重发才不会变成两条')
+
+    const kind = String(body.kind ?? 'text')
+    if (kind !== 'text') {
+      return fail(reply, 400, 'kind_not_ready', `P1 只会发文字，${kind} 还没做`)
+    }
+
+    const text = String(body.text ?? '').trim()
+    if (!text) return fail(reply, 400, 'empty_message', '空消息不发')
+    if (text.length > LIMITS.messageMaxChars) {
+      return fail(reply, 400, 'too_long', `一条最多 ${LIMITS.messageMaxChars} 字`)
+    }
+
+    let replyTo: string | null = null
+    if (body.replyTo !== undefined && body.replyTo !== null && body.replyTo !== '') {
+      replyTo = String(body.replyTo)
+      if (!findMessage(db, replyTo)) {
+        return fail(reply, 400, 'bad_reply_to', '引用的那条消息不在了')
+      }
+    }
+
+    const { message, created } = createMessage(db, hub, {
+      convId,
+      sender: 'me',
+      kind: 'text',
+      text,
+      replyTo,
+      source: 'web',
+      clientId,
+    })
+
+    if (created) mock.note(text)
+    return { ok: true, message, created }
+  })
+
+  app.post('/api/typing', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    const body = (req.body ?? {}) as Record<string, unknown>
+    hub.publish({ type: 'typing.changed', data: { who: 'me', on: Boolean(body.on) } })
+    return { ok: true }
+  })
+
+  /**
+   * SSE。
+   *
+   * 连上先给 hello，再把 since 之后的消息补一遍，然后转实时。
+   * 每 25 秒一个 ping，别让中间的反代把空闲连接掐掉。
+   */
+  app.get('/api/stream', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+
+    const query = (req.query ?? {}) as Record<string, unknown>
+    const sinceRaw = Number(query.since ?? 0)
+    const since = Number.isFinite(sinceRaw) && sinceRaw > 0 ? Math.trunc(sinceRaw) : 0
+
+    reply.hijack()
+    const raw = reply.raw
+    raw.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-store, no-transform',
+      connection: 'keep-alive',
+      'x-accel-buffering': 'no',
+    })
+    raw.write('retry: 3000\n\n')
+
+    const send = (event: { type: string; data: unknown }) => {
+      raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`)
+    }
+
+    const conversation = conversationOf()
+    send({ type: 'hello', data: { convId, lastSeq: conversation.lastSeq, serverTime: Date.now() } })
+
+    // 补历史：最多补 5 页，多了让客户端自己翻
+    let cursor = since
+    for (let page = 0; page < 5; page += 1) {
+      const batch = listSince(db, convId, cursor, 200)
+      for (const message of batch.items) {
+        send({ type: 'message.created', data: message })
+        cursor = message.seq
+      }
+      if (!batch.hasMore) break
+    }
+
+    const off = hub.add(send)
+    const ping = setInterval(() => {
+      try {
+        send({ type: 'ping', data: { t: Date.now() } })
+      } catch {
+        // 写不进去就靠 close 收拾
+      }
+    }, 25_000)
+
+    let closed = false
+    const cleanup = () => {
+      if (closed) return
+      closed = true
+      clearInterval(ping)
+      off()
+      try {
+        raw.end()
+      } catch {
+        // 已经断了
+      }
+    }
+    req.raw.on('close', cleanup)
+    req.raw.on('error', cleanup)
+    raw.on('error', cleanup)
+  })
+
   // ── 静态文件（构建后的前端）───────────────────────────────────────
   const hasWeb = existsSync(resolve(paths.webDist, 'index.html'))
   if (hasWeb) {
@@ -198,6 +371,7 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
 
   app.addHook('onClose', async () => {
     clearInterval(sweepTimer)
+    mock.stop()
   })
 
   return app

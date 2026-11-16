@@ -26,6 +26,16 @@ export interface AppConfig {
     maxBytes: number
     maxCount: number
   }
+  /** 假鱼回声。接上 DSH 以后把它关掉。 */
+  mock: {
+    enabled: boolean
+    /** 2 秒内连发的并成一轮。 */
+    mergeWindowMs: number
+    /** 显示「正在输入」多久之后出字。 */
+    typingMs: number
+    /** 回答分几段时，段与段之间隔多久。 */
+    gapMs: number
+  }
 }
 
 export interface AppPaths {
@@ -104,6 +114,7 @@ function normalize(value: unknown, where: string): AppConfig {
   const peer = (v.peer ?? {}) as Record<string, unknown>
   const session = (v.session ?? {}) as Record<string, unknown>
   const sticker = (v.sticker ?? {}) as Record<string, unknown>
+  const mock = (v.mock ?? {}) as Record<string, unknown>
 
   const password = String(v.password ?? '')
   if (!password) throw new Error(`配置里没写 password：${where}`)
@@ -134,6 +145,12 @@ function normalize(value: unknown, where: string): AppConfig {
     sticker: {
       maxBytes: clampInt(sticker.maxBytes, 64 * 1024, 20 * 1024 * 1024, 5 * 1024 * 1024),
       maxCount: clampInt(sticker.maxCount, 1, 1000, 100),
+    },
+    mock: {
+      enabled: mock.enabled !== false,
+      mergeWindowMs: clampInt(mock.mergeWindowMs, 0, 60_000, 2000),
+      typingMs: clampInt(mock.typingMs, 0, 60_000, 1200),
+      gapMs: clampInt(mock.gapMs, 0, 60_000, 700),
     },
   }
 }

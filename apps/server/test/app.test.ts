@@ -21,6 +21,7 @@ const config: AppConfig = {
   dataDir: 'unused',
   session: { days: 30 },
   sticker: { maxBytes: 5 * 1024 * 1024, maxCount: 100 },
+  mock: { enabled: false, mergeWindowMs: 10, typingMs: 10, gapMs: 10 },
 }
 
 before(() => {
