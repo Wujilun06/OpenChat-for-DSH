@@ -4,9 +4,9 @@ import { ApiError, api } from '../api'
 import { MessageRow } from './MessageRow'
 import { StickerPanel } from './StickerPanel'
 import { PlusMenu } from './PlusMenu'
-import { ImageViewer } from './ImageViewer'
+import { MediaViewer } from './MediaViewer'
 import { refLabel } from '../lib/preview'
-import { CloseIcon, MicIcon, MoreIcon, PhoneIcon, PlusIcon, SmileIcon, VideoIcon } from './icons'
+import { CloseIcon, MicIcon, MoreIcon, PlusIcon, SmileIcon } from './icons'
 
 export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void }) {
   const [messages, setMessages] = useState<MessageInfo[]>([])
@@ -381,12 +381,6 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
           {fishTyping ? '对方正在输入…' : me.peer.name}
         </h1>
         <div className="chat-actions">
-          <button className="icon-btn" type="button" title="语音通话（预留）" onClick={() => {}}>
-            <PhoneIcon />
-          </button>
-          <button className="icon-btn" type="button" title="视频通话（预留）" onClick={() => {}}>
-            <VideoIcon />
-          </button>
           <button
             className="icon-btn"
             type="button"
@@ -429,7 +423,7 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
               timeLevel={timeLevels[message.id] ?? 0}
               onCycleTime={cycleTime}
               onQuote={setReplyTo}
-              onOpenImage={(attachment) => setViewer(attachment)}
+              onOpenMedia={(attachment) => setViewer(attachment)}
               onMediaLoad={() => {
                 if (stickRef.current) scrollToBottom()
               }}
@@ -527,7 +521,7 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
         />
       ) : null}
 
-      {viewer ? <ImageViewer attachment={viewer} onClose={() => setViewer(null)} /> : null}
+      {viewer ? <MediaViewer attachment={viewer} onClose={() => setViewer(null)} /> : null}
 
       {toast ? <div className="toast">{toast}</div> : null}
     </div>

@@ -69,10 +69,10 @@ SQLite，文件在 `data/openchat.db`。WAL 模式，`synchronous=NORMAL`，
 | kind | `image` / `video` / `file` |
 | name | 原始文件名（清洗过），只用来显示 |
 | ext / mime | 扩展名和 MIME |
-| width / height | 图片才有 |
+| width / height | 图片用 sharp 读；视频用 ffprobe 读（读不到就是空） |
 | bytes | 大小 |
 | file_rel | 相对 `data/` 的路径 |
-| thumb_rel | 图片缩略图；视频和文件为空 |
+| thumb_rel | 图片缩略图；视频是首帧；文件为空 |
 | created_at | 毫秒 |
 
 文件布局：`data/files/<哈希前两位>/<sha256>.<ext>`，缩略图 `data/file-thumbs/<sha256>.png`。

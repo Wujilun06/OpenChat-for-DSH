@@ -473,7 +473,7 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
     }
 
     try {
-      const attachment = await createAttachment(db, paths, config.attachment, {
+      const attachment = await createAttachment(db, paths, config.attachment, config.media, {
         buffer,
         filename: part.filename,
         mime: part.mimetype,

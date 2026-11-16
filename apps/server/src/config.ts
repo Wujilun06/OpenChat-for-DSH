@@ -32,6 +32,11 @@ export interface AppConfig {
     videoMaxBytes: number
     fileMaxBytes: number
   }
+  /** 抽视频首帧用的外部工具。找不到就当没有缩略图，不影响收消息。 */
+  media: {
+    ffmpeg: string
+    ffprobe: string
+  }
   /** 假鱼回声。接上 DSH 以后把它关掉。 */
   mock: {
     enabled: boolean
@@ -125,6 +130,7 @@ function normalize(value: unknown, where: string): AppConfig {
   const session = (v.session ?? {}) as Record<string, unknown>
   const sticker = (v.sticker ?? {}) as Record<string, unknown>
   const attachment = (v.attachment ?? {}) as Record<string, unknown>
+  const media = (v.media ?? {}) as Record<string, unknown>
   const mock = (v.mock ?? {}) as Record<string, unknown>
 
   const password = String(v.password ?? '')
@@ -167,6 +173,10 @@ function normalize(value: unknown, where: string): AppConfig {
       mergeWindowMs: clampInt(mock.mergeWindowMs, 0, 60_000, 2000),
       typingMs: clampInt(mock.typingMs, 0, 60_000, 1200),
       gapMs: clampInt(mock.gapMs, 0, 60_000, 700),
+    },
+    media: {
+      ffmpeg: String(media.ffmpeg ?? 'ffmpeg'),
+      ffprobe: String(media.ffprobe ?? 'ffprobe'),
     },
   }
 }

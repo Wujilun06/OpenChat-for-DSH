@@ -22,6 +22,7 @@ const config: AppConfig = {
   session: { days: 30 },
   sticker: { maxBytes: 5 * 1024 * 1024, maxCount: 100 },
   attachment: { imageMaxBytes: 5 * 1024 * 1024, videoMaxBytes: 5 * 1024 * 1024, fileMaxBytes: 5 * 1024 * 1024 },
+  media: { ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' },
   mock: { enabled: false, mergeWindowMs: 10, typingMs: 10, gapMs: 10 },
 }
 

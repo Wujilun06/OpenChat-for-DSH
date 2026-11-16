@@ -12,8 +12,8 @@ export interface MessageRowProps {
   onCycleTime: (id: string) => void
   /** 右键 / 长按 */
   onQuote: (message: MessageInfo) => void
-  /** 点图片看原图 */
-  onOpenImage: (attachment: AttachmentInfo) => void
+  /** 点图片或视频看大图 / 播放 */
+  onOpenMedia: (attachment: AttachmentInfo) => void
   /** 图加载完再贴一次底 */
   onMediaLoad: () => void
 }
@@ -22,7 +22,25 @@ function nameOf(sender: Sender, peer: { name: string }): string {
   return sender === 'me' ? '我' : peer.name
 }
 
+/** 缩略图大小：长边夹在 180–240 之间，保证比表情（132）明显大。 */
+function thumbBox(w: number | null, h: number | null, max = 240, min = 180) {
+  if (!w || !h) return { width: max, height: Math.round((max * 2) / 3) }
+  const long = Math.max(w, h)
+  const target = Math.min(max, Math.max(min, long))
+  const k = target / long
+  return { width: Math.round(w * k), height: Math.round(h * k) }
+}
+
 const LONG_PRESS_MS = 500
+
+function PlayBadge() {
+  return (
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="27" fill="rgba(0,0,0,0.32)" stroke="#fff" strokeWidth="3" />
+      <path d="M26.5 20.5v23l18-11.5z" fill="#fff" />
+    </svg>
+  )
+}
 
 export function MessageRow({
   message,
@@ -30,13 +48,15 @@ export function MessageRow({
   timeLevel,
   onCycleTime,
   onQuote,
-  onOpenImage,
+  onOpenMedia,
   onMediaLoad,
 }: MessageRowProps) {
   const isMe = message.sender === 'me'
   const sticker = message.kind === 'sticker' ? message.sticker : null
   const attachment = message.attachment
   const isImage = message.kind === 'image' && attachment !== null
+  const isVideo = message.kind === 'video' && attachment !== null
+  const mediaBox = attachment && (isImage || isVideo) ? thumbBox(attachment.w, attachment.h) : null
 
   const timeText =
     timeLevel === 1 ? formatClock(message.createdAt) : timeLevel === 2 ? formatFull(message.createdAt) : ''
@@ -60,13 +80,13 @@ export function MessageRow({
     'bubble',
     sticker ? 'sticker-bubble' : '',
     isImage ? 'image-bubble' : '',
-    message.kind === 'video' ? 'media-bubble' : '',
+    isVideo ? 'video-bubble' : '',
     message.kind === 'file' ? 'file-bubble' : '',
   ]
     .filter(Boolean)
     .join(' ')
 
-  const hint = isImage ? '点开看原图 · 右键/长按引用' : '右键 / 长按引用'
+  const hint = isImage || isVideo ? '点开看大图 · 右键/长按引用' : '右键 / 长按引用'
 
   return (
     <div className={`msg ${isMe ? 'me' : 'fish'}`}>
@@ -144,7 +164,7 @@ export function MessageRow({
               fired.current = false
               return
             }
-            if (isImage && attachment) onOpenImage(attachment)
+            if ((isImage || isVideo) && attachment) onOpenMedia(attachment)
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') onQuote(message)
@@ -170,20 +190,26 @@ export function MessageRow({
             <img
               className="image-img"
               src={attachment.thumbUrl ?? attachment.fileUrl}
-              width={attachment.w ?? undefined}
-              height={attachment.h ?? undefined}
+              style={mediaBox ?? undefined}
               alt={attachment.name}
               onLoad={onMediaLoad}
             />
-          ) : message.kind === 'video' && attachment ? (
-            <video
-              className="video-el"
-              src={attachment.fileUrl}
-              controls
-              preload="metadata"
-              playsInline
-              onLoadedMetadata={onMediaLoad}
-            />
+          ) : isVideo && attachment ? (
+            <div className="video-thumb" style={mediaBox ?? undefined}>
+              {attachment.thumbUrl ? (
+                <img
+                  className="video-thumb-img"
+                  src={attachment.thumbUrl}
+                  alt={attachment.name}
+                  onLoad={onMediaLoad}
+                />
+              ) : (
+                <div className="video-fallback" />
+              )}
+              <span className="play-badge">
+                <PlayBadge />
+              </span>
+            </div>
           ) : message.kind === 'file' && attachment ? (
             <a
               className="file-card"

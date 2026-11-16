@@ -22,6 +22,10 @@
     "videoMaxBytes": 52428800,
     "fileMaxBytes": 52428800
   },
+  "media": {
+    "ffmpeg": "ffmpeg",
+    "ffprobe": "ffprobe"
+  },
   "mock": {
     "enabled": true,
     "mergeWindowMs": 2000,

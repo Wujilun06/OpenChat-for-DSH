@@ -680,27 +680,56 @@ button {
   display: block;
   width: auto;
   height: auto;
-  max-width: 200px;
-  max-height: 200px;
+  max-width: 240px;
+  max-height: 240px;
   border-radius: 8px;
 }
 
-.media-bubble {
+.video-bubble {
   padding: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.media-bubble::after {
+.video-bubble::after {
   display: none;
 }
 
-.video-el {
+.video-thumb {
+  position: relative;
   display: block;
-  max-width: 220px;
-  max-height: 220px;
+  overflow: hidden;
+  max-width: 240px;
+  max-height: 240px;
   border-radius: 10px;
   background: #000;
+}
+
+.video-thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-fallback {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(160deg, #2b3f5c, #101f36);
+}
+
+.play-badge {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.play-badge svg {
+  width: 52px;
+  height: 52px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
 }
 
 .file-bubble {
@@ -804,10 +833,9 @@ button {
   background: rgba(0, 0, 0, 0.92);
 }
 
-.viewer img {
-  max-width: 100%;
-  max-height: 100%;
+.viewer-media {
   border-radius: 4px;
+  background: #000;
   object-fit: contain;
 }
 
