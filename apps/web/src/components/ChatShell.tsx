@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { MeResult, MessageInfo, StickerInfo } from '@openchat/shared'
+import type { AttachmentInfo, MeResult, MessageInfo, StickerInfo } from '@openchat/shared'
 import { ApiError, api } from '../api'
 import { MessageRow } from './MessageRow'
 import { StickerPanel } from './StickerPanel'
+import { PlusMenu } from './PlusMenu'
+import { ImageViewer } from './ImageViewer'
+import { refLabel } from '../lib/preview'
 import { CloseIcon, MicIcon, MoreIcon, PhoneIcon, PlusIcon, SmileIcon, VideoIcon } from './icons'
 
 export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void }) {
@@ -22,6 +25,8 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
   const [stickerMax, setStickerMax] = useState(100)
   const [stickersLoading, setStickersLoading] = useState(false)
   const [stickerError, setStickerError] = useState('')
+  const [plusOpen, setPlusOpen] = useState(false)
+  const [viewer, setViewer] = useState<AttachmentInfo | null>(null)
 
   const lastSeqRef = useRef(me.conversation.lastSeq)
   const stickRef = useRef(true)
@@ -35,6 +40,14 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
     setToast(text)
     if (toastTimer.current) clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(''), 2000)
+  }, [])
+
+  const clearToast = useCallback(() => {
+    if (toastTimer.current) {
+      clearTimeout(toastTimer.current)
+      toastTimer.current = null
+    }
+    setToast('')
   }, [])
 
   const scrollToBottom = useCallback((smooth = false) => {
@@ -267,6 +280,15 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
     setTimeLevels((prev) => ({ ...prev, [id]: ((prev[id] ?? 0) + 1) % 3 }))
   }
 
+  const previewOf = (message: MessageInfo) =>
+    refLabel({
+      id: message.id,
+      sender: message.sender,
+      kind: message.kind,
+      text: message.text,
+      stickerId: message.sticker?.id ?? null,
+    })
+
   const loadStickers = useCallback(async () => {
     setStickersLoading(true)
     setStickerError('')
@@ -327,6 +349,31 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
     }
   }
 
+  const sendAttachment = async (file: File) => {
+    setPlusOpen(false)
+    if (sending) return
+    setSending(true)
+    flash('正在上传…')
+    try {
+      const uploaded = await api.uploadAttachment(file)
+      const res = await api.sendMessage({
+        clientId: crypto.randomUUID(),
+        kind: uploaded.attachment.kind,
+        attachmentId: uploaded.attachment.id,
+        replyTo: replyTo?.id ?? null,
+      })
+      append([res.message])
+      setReplyTo(null)
+      stickRef.current = true
+      scrollToBottom()
+      clearToast()
+    } catch (err) {
+      flash(err instanceof ApiError ? err.message : '传不上去')
+    } finally {
+      setSending(false)
+    }
+  }
+
   return (
     <div className="chat">
       <header className="chat-header">
@@ -382,6 +429,7 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
               timeLevel={timeLevels[message.id] ?? 0}
               onCycleTime={cycleTime}
               onQuote={setReplyTo}
+              onOpenImage={(attachment) => setViewer(attachment)}
               onMediaLoad={() => {
                 if (stickRef.current) scrollToBottom()
               }}
@@ -394,7 +442,7 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
         {replyTo ? (
           <div className="reply-bar">
             <span className="reply-text">
-              回复 {replyTo.sender === 'me' ? '我' : me.peer.name}：{replyTo.text ?? '[表情]'}
+              回复 {replyTo.sender === 'me' ? '我' : me.peer.name}：{previewOf(replyTo)}
             </span>
             <button className="reply-close" type="button" aria-label="取消引用" onClick={() => setReplyTo(null)}>
               <CloseIcon width={16} height={16} />
@@ -426,11 +474,23 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
             type="button"
             title="表情"
             aria-label="表情"
-            onClick={() => setStickerOpen((v) => !v)}
+            onClick={() => {
+              setPlusOpen(false)
+              setStickerOpen((v) => !v)
+            }}
           >
             <SmileIcon />
           </button>
-          <button className="tool" type="button" disabled title="更多（还没做）">
+          <button
+            className="tool"
+            type="button"
+            title="更多"
+            aria-label="更多功能"
+            onClick={() => {
+              setStickerOpen(false)
+              setPlusOpen((v) => !v)
+            }}
+          >
             <PlusIcon />
           </button>
           <button className="send" type="button" disabled={!draft.trim() || sending} onClick={() => void send()}>
@@ -438,6 +498,21 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
           </button>
         </div>
       </footer>
+
+      {plusOpen ? (
+        <PlusMenu
+          onPickFile={(file) => void sendAttachment(file)}
+          onSticker={() => {
+            setPlusOpen(false)
+            setStickerOpen(true)
+          }}
+          onCall={() => {
+            setPlusOpen(false)
+            flash('通话还没做（P4）')
+          }}
+          onClose={() => setPlusOpen(false)}
+        />
+      ) : null}
 
       {stickerOpen ? (
         <StickerPanel
@@ -451,6 +526,8 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
           onClose={() => setStickerOpen(false)}
         />
       ) : null}
+
+      {viewer ? <ImageViewer attachment={viewer} onClose={() => setViewer(null)} /> : null}
 
       {toast ? <div className="toast">{toast}</div> : null}
     </div>

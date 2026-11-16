@@ -8,6 +8,7 @@ import type {
 } from '@openchat/shared'
 import { nextSeq } from '../db.js'
 import type { Hub } from './hub.js'
+import { getAttachmentInfo } from './attachments.js'
 import { getStickerInfo } from './stickers.js'
 
 export interface MessageRow {
@@ -18,6 +19,7 @@ export interface MessageRow {
   kind: string
   text: string | null
   sticker_id: string | null
+  attachment_id: string | null
   voice_ms: number | null
   reply_to: string | null
   source: string
@@ -31,13 +33,14 @@ export interface NewMessage {
   text: string | null
   voiceMs?: number | null
   stickerId?: string | null
+  attachmentId?: string | null
   replyTo?: string | null
   source: MessageSource
   clientId?: string | null
 }
 
 const COLUMNS =
-  'id, conv_id, seq, sender, kind, text, sticker_id, voice_ms, reply_to, source, created_at'
+  'id, conv_id, seq, sender, kind, text, sticker_id, attachment_id, voice_ms, reply_to, source, created_at'
 
 export function rowToMessage(db: DatabaseSync, row: MessageRow): MessageInfo {
   const reply = row.reply_to ? refOf(db, row.reply_to) : null
@@ -49,6 +52,7 @@ export function rowToMessage(db: DatabaseSync, row: MessageRow): MessageInfo {
     kind: row.kind as MessageKind,
     text: row.text,
     sticker: row.sticker_id ? getStickerInfo(db, row.sticker_id) : null,
+    attachment: row.attachment_id ? getAttachmentInfo(db, row.attachment_id) : null,
     voiceMs: row.voice_ms === null ? null : Number(row.voice_ms),
     replyTo: reply,
     source: row.source as MessageSource,
@@ -157,8 +161,8 @@ export function insertMessage(db: DatabaseSync, input: NewMessage): MessageInfo 
     const seq = nextSeq(db, input.convId)
     db.prepare(
       `INSERT INTO messages
-         (id, conv_id, seq, sender, kind, text, sticker_id, voice_ms, reply_to, source, client_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, conv_id, seq, sender, kind, text, sticker_id, attachment_id, voice_ms, reply_to, source, client_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       input.convId,
@@ -167,6 +171,7 @@ export function insertMessage(db: DatabaseSync, input: NewMessage): MessageInfo 
       input.kind,
       input.text,
       input.stickerId ?? null,
+      input.attachmentId ?? null,
       input.voiceMs ?? null,
       input.replyTo ?? null,
       input.source,

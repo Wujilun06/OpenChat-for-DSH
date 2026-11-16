@@ -1,4 +1,5 @@
 import type {
+  AttachmentInfo,
   HealthInfo,
   LoginResult,
   MeResult,
@@ -70,9 +71,10 @@ function messageQuery(params: ListMessagesParams): string {
 
 export interface SendMessageInput {
   clientId: string
-  kind: 'text' | 'sticker'
+  kind: 'text' | 'sticker' | 'image' | 'video' | 'file'
   text?: string
   stickerId?: string
+  attachmentId?: string
   replyTo?: string | null
 }
 
@@ -114,4 +116,13 @@ export const api = {
 
   deleteSticker: (id: string) =>
     request<{ ok: true }>(`/api/stickers/${id}`, { method: 'DELETE' }),
+
+  uploadAttachment: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<{ ok: true; attachment: AttachmentInfo }>('/api/attachments', {
+      method: 'POST',
+      body: form,
+    })
+  },
 }

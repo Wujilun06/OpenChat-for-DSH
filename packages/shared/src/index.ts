@@ -8,8 +8,11 @@
 /** 谁说的。`me` = 网页这一端的人，`fish` = 对面那条鱼。 */
 export type Sender = 'me' | 'fish'
 
-/** 消息种类。P0 只落 text，但类型一次定全，后面加不用改契约。 */
-export type MessageKind = 'text' | 'sticker' | 'voice' | 'system'
+/** 消息种类。 */
+export type MessageKind = 'text' | 'sticker' | 'voice' | 'system' | 'image' | 'video' | 'file'
+
+/** 普通附件（图片/视频/文件）跟表情是两回事：表情进池子，附件发完就完了。 */
+export type AttachmentKind = 'image' | 'video' | 'file'
 
 /** 这条消息从哪来：网页打的、开发期假鱼、DSH 会话、历史导入。 */
 export type MessageSource = 'web' | 'mock' | 'dsh' | 'import'
@@ -51,6 +54,21 @@ export interface StickerInfo {
   fileUrl: string
 }
 
+export interface AttachmentInfo {
+  id: string
+  kind: AttachmentKind
+  /** 原始文件名，只用来显示。 */
+  name: string
+  mime: string
+  bytes: number
+  /** 图片才有宽高。 */
+  w: number | null
+  h: number | null
+  /** 图片有缩略图；视频和文件没有。 */
+  thumbUrl: string | null
+  fileUrl: string
+}
+
 /** 引用回复里只带够画一行的那点东西。 */
 export interface MessageRef {
   id: string
@@ -70,6 +88,7 @@ export interface MessageInfo {
   /** 正文；语音消息里放转写结果。 */
   text: string | null
   sticker: StickerInfo | null
+  attachment: AttachmentInfo | null
   /** 语音时长（毫秒）。没有音频时也保留，气泡上要显示秒数。 */
   voiceMs: number | null
   replyTo: MessageRef | null
@@ -165,6 +184,12 @@ export const LIMITS = {
   voiceMaxMs: 60_000,
   /** 一条文字消息最长多少字。 */
   messageMaxChars: 4000,
+  /** 普通图片单张上限。 */
+  imageMaxBytes: 10 * 1024 * 1024,
+  /** 视频单条上限。 */
+  videoMaxBytes: 50 * 1024 * 1024,
+  /** 文件单条上限。 */
+  fileMaxBytes: 50 * 1024 * 1024,
 } as const
 
 /** 允许的表情格式，扩展名小写。 */

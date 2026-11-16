@@ -3,7 +3,7 @@
 SQLite，文件在 `data/openchat.db`。WAL 模式，`synchronous=NORMAL`，
 `foreign_keys=ON`，`busy_timeout=5000`。
 
-表结构版本记在 `meta.schema_version`，现在是 **v1**。
+表结构版本记在 `meta.schema_version`，现在是 **v2**（v1 的库会自动迁移，测试里有覆盖）。
 
 ## conversations
 
@@ -27,9 +27,10 @@ SQLite，文件在 `data/openchat.db`。WAL 模式，`synchronous=NORMAL`，
 | conv_id | 外键 → conversations |
 | seq | 会话内递增，`UNIQUE(conv_id,seq)`，客户端游标就是它 |
 | sender | `me` / `fish` |
-| kind | `text` / `sticker` / `voice` / `system` |
+| kind | `text` / `sticker` / `voice` / `system` / `image` / `video` / `file` |
 | text | 正文；语音消息里放转写结果 |
 | sticker_id | → stickers.id；表情删了历史消息照样能显示（行还在） |
+| attachment_id | → attachments.id；图片/视频/文件消息用它 |
 | voice_ms | 语音时长 |
 | audio_ref | **现在永远为空**。以后存音频时写对象键/相对路径，不用改表 |
 | reply_to | 引用回复，指向上一条 message.id |
@@ -56,6 +57,25 @@ SQLite，文件在 `data/openchat.db`。WAL 模式，`synchronous=NORMAL`，
 
 文件布局：`data/stickers/<哈希前两位>/<sha256>.<ext>`，
 缩略图 `data/thumbs/<sha256>.png`。
+
+## attachments
+
+普通附件。跟表情不是一个东西：没有池子、没有软删，上传完就挂在消息上。
+
+| 列 | 说明 |
+|---|---|
+| id | uuid |
+| sha256 | 内容哈希，`UNIQUE`，同一份文件只存一份 |
+| kind | `image` / `video` / `file` |
+| name | 原始文件名（清洗过），只用来显示 |
+| ext / mime | 扩展名和 MIME |
+| width / height | 图片才有 |
+| bytes | 大小 |
+| file_rel | 相对 `data/` 的路径 |
+| thumb_rel | 图片缩略图；视频和文件为空 |
+| created_at | 毫秒 |
+
+文件布局：`data/files/<哈希前两位>/<sha256>.<ext>`，缩略图 `data/file-thumbs/<sha256>.png`。
 
 ## auth_sessions
 

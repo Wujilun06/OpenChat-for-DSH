@@ -34,12 +34,15 @@ Cookie 名 `oc_session`：HttpOnly、SameSite=Lax、https 下带 Secure、
 ```json
 { "clientId": "客户端生成的 uuid", "kind": "text", "text": "在吗", "replyTo": "被引用消息的 id" }
 { "clientId": "客户端生成的 uuid", "kind": "sticker", "stickerId": "表情 id" }
+{ "clientId": "客户端生成的 uuid", "kind": "image", "attachmentId": "附件 id" }
 ```
 
 - `clientId` 必填。同一条重发会拿回原来那条，`created: false`，不会变两条。
-- `kind` 认 `text` / `sticker`；别的回 `kind_not_ready`。
+- `kind` 认 `text` / `sticker` / `image` / `video` / `file`；别的回 `kind_not_ready`。
 - 文字去掉首尾空白后为空 → `400 empty_message`；超过 4000 字 → `400 too_long`。
 - 表情必须还在面板里（没删）→ 否则 `400 bad_sticker`。
+- 图片/视频/文件必须带 `attachmentId`，而且附件类型要对得上 → 否则
+  `400 attachment_required` / `bad_attachment` / `attachment_kind_mismatch`。
 - `replyTo` 指向不存在的消息 → `400 bad_reply_to`。
 
 ### 合并窗口
@@ -70,6 +73,26 @@ Cookie 名 `oc_session`：HttpOnly、SameSite=Lax、https 下带 Secure、
 `sticker_limit`(409)、`sticker_required` / `bad_sticker`(400)、`sticker_not_found`(404)。
 
 发一条表情消息就是把 `kind` 换成 `sticker`、带上 `stickerId`（见上面「消息」）。
+
+## 附件：图片 / 视频 / 文件（P2.5 已实现）
+
+| 方法 | 路径 | 干什么 |
+|---|---|---|
+| POST | `/api/attachments` | multipart 上传，字段名 `file` |
+| GET | `/api/attachments/:id/thumb` | 图片缩略图（png，320px 内） |
+| GET | `/api/attachments/:id/file` | 原文件，支持 `Range` |
+
+规则：
+
+- 按 `Content-Type` 分类：`image/*` → 图片（用 sharp 验一遍）、`video/*` → 视频、其余 → 文件。
+- 上限（可在 `config.attachment` 改）：图片 10 MB、视频 50 MB、文件 50 MB。
+- 同一份内容只存一次（sha256 去重）。
+- `file` 响应带 `Range` 支持（206 + `Content-Range`），Safari 播视频要靠它。
+- 图片/视频用 `Content-Disposition: inline`，普通文件用 `attachment`（点了就下载）。
+- 附件跟表情是两回事：附件进 `attachments` 表，发完就挂在消息上；表情进共享池。
+
+错误码：`file_too_large`(413)、`bad_image`(400)、`unsupported_image`(400)、
+`attachment_not_found`(404)、`file_missing`(404)。
 
 ## 通话（还没做）
 
@@ -124,6 +147,9 @@ interface MessageInfo {
 |---|---|
 | 表情单文件 | 5 MB |
 | 表情共享池 | 100 个 |
+| 图片 | 10 MB |
+| 视频 | 50 MB |
+| 文件 | 50 MB |
 | 语音 | 60 秒，最长 |
 | 文字 | 4000 字 |
 | 登录失败 | 10 分钟 5 次 → 锁 15 分钟 |

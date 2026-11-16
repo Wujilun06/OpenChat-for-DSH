@@ -26,6 +26,12 @@ export interface AppConfig {
     maxBytes: number
     maxCount: number
   }
+  /** 普通附件（图片/视频/文件）的上限，按类型分开。 */
+  attachment: {
+    imageMaxBytes: number
+    videoMaxBytes: number
+    fileMaxBytes: number
+  }
   /** 假鱼回声。接上 DSH 以后把它关掉。 */
   mock: {
     enabled: boolean
@@ -46,6 +52,8 @@ export interface AppPaths {
   dbFile: string
   stickersDir: string
   thumbsDir: string
+  filesDir: string
+  fileThumbsDir: string
   webDist: string
 }
 
@@ -70,6 +78,8 @@ export function resolvePaths(root: string, config: AppConfig, configFile: string
     dbFile: resolve(dataDir, 'openchat.db'),
     stickersDir: resolve(dataDir, 'stickers'),
     thumbsDir: resolve(dataDir, 'thumbs'),
+    filesDir: resolve(dataDir, 'files'),
+    fileThumbsDir: resolve(dataDir, 'file-thumbs'),
     webDist: resolve(root, 'apps/web/dist'),
   }
 }
@@ -114,6 +124,7 @@ function normalize(value: unknown, where: string): AppConfig {
   const peer = (v.peer ?? {}) as Record<string, unknown>
   const session = (v.session ?? {}) as Record<string, unknown>
   const sticker = (v.sticker ?? {}) as Record<string, unknown>
+  const attachment = (v.attachment ?? {}) as Record<string, unknown>
   const mock = (v.mock ?? {}) as Record<string, unknown>
 
   const password = String(v.password ?? '')
@@ -146,6 +157,11 @@ function normalize(value: unknown, where: string): AppConfig {
       maxBytes: clampInt(sticker.maxBytes, 64 * 1024, 20 * 1024 * 1024, 5 * 1024 * 1024),
       maxCount: clampInt(sticker.maxCount, 1, 1000, 100),
     },
+    attachment: {
+      imageMaxBytes: clampInt(attachment.imageMaxBytes, 64 * 1024, 100 * 1024 * 1024, 10 * 1024 * 1024),
+      videoMaxBytes: clampInt(attachment.videoMaxBytes, 64 * 1024, 500 * 1024 * 1024, 50 * 1024 * 1024),
+      fileMaxBytes: clampInt(attachment.fileMaxBytes, 64 * 1024, 500 * 1024 * 1024, 50 * 1024 * 1024),
+    },
     mock: {
       enabled: mock.enabled !== false,
       mergeWindowMs: clampInt(mock.mergeWindowMs, 0, 60_000, 2000),
@@ -162,7 +178,13 @@ function clampInt(input: unknown, min: number, max: number, fallback: number): n
 }
 
 export function ensureDirs(paths: AppPaths): void {
-  for (const dir of [paths.dataDir, paths.stickersDir, paths.thumbsDir]) {
+  for (const dir of [
+    paths.dataDir,
+    paths.stickersDir,
+    paths.thumbsDir,
+    paths.filesDir,
+    paths.fileThumbsDir,
+  ]) {
     mkdirSync(dir, { recursive: true })
   }
 }

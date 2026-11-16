@@ -4,7 +4,7 @@ import { dirname } from 'node:path'
 import type { AppPaths } from './config.js'
 
 /** 现在的表结构版本。改表就 +1，并在 migrate() 里补一段。 */
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 /**
  * 打开数据库并跑迁移。
@@ -37,13 +37,31 @@ function migrate(db: DatabaseSync): void {
   const current = readMeta(db, 'schema_version')
 
   if (current === null) {
-    db.exec(SCHEMA_V1)
+    db.exec(SCHEMA_V2)
     writeMeta(db, 'schema_version', String(SCHEMA_VERSION))
     seed(db)
     return
   }
 
-  if (Number(current) !== SCHEMA_VERSION) {
+  const version = Number(current)
+
+  if (version === 1) {
+    db.exec('PRAGMA foreign_keys = OFF;')
+    try {
+      db.exec('BEGIN;')
+      db.exec(MIGRATE_1_TO_2)
+      db.exec('COMMIT;')
+    } catch (error) {
+      db.exec('ROLLBACK;')
+      throw error
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON;')
+    }
+    writeMeta(db, 'schema_version', String(SCHEMA_VERSION))
+    return
+  }
+
+  if (version !== SCHEMA_VERSION) {
     throw new Error(
       `数据库表结构是 v${current}，代码要的是 v${SCHEMA_VERSION}。` +
         `这个版本还没有自动迁移，先备份 data 目录再处理。`,
@@ -75,7 +93,54 @@ function writeMeta(db: DatabaseSync, key: string, value: string): void {
   ).run(key, value)
 }
 
-const SCHEMA_V1 = `
+const ATTACHMENTS_TABLE = `
+CREATE TABLE IF NOT EXISTS attachments (
+  id         TEXT PRIMARY KEY,
+  sha256     TEXT NOT NULL UNIQUE,
+  kind       TEXT NOT NULL CHECK (kind IN ('image', 'video', 'file')),
+  name       TEXT NOT NULL,
+  ext        TEXT NOT NULL,
+  mime       TEXT NOT NULL,
+  width      INTEGER,
+  height     INTEGER,
+  bytes      INTEGER NOT NULL,
+  file_rel   TEXT NOT NULL,
+  thumb_rel  TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_attachments_created ON attachments(created_at DESC);
+`
+
+// 消息表单独拎出来：v2 迁移要重建它（CHECK 里的类型多了 image/video/file）。
+const MESSAGES_TABLE = `
+CREATE TABLE messages (
+  id            TEXT PRIMARY KEY,
+  conv_id       TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  seq           INTEGER NOT NULL,
+  sender        TEXT NOT NULL CHECK (sender IN ('me', 'fish')),
+  kind          TEXT NOT NULL CHECK (kind IN ('text', 'sticker', 'voice', 'system', 'image', 'video', 'file')),
+  text          TEXT,
+  sticker_id    TEXT,
+  attachment_id TEXT,
+  voice_ms      INTEGER,
+  -- 现在不存音频。这一列是给以后把语音加回来留的（对象键或文件相对路径）。
+  audio_ref     TEXT,
+  reply_to      TEXT,
+  source        TEXT NOT NULL DEFAULT 'web',
+  client_id     TEXT,
+  created_at    INTEGER NOT NULL,
+  UNIQUE (conv_id, seq),
+  UNIQUE (client_id)
+);
+`
+
+const MESSAGES_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_messages_conv_seq ON messages(conv_id, seq DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_sticker ON messages(sticker_id);
+CREATE INDEX IF NOT EXISTS idx_messages_attachment ON messages(attachment_id);
+`
+
+const SCHEMA_V2 = `
 CREATE TABLE IF NOT EXISTS auth_sessions (
   token_hash   TEXT PRIMARY KEY,
   created_at   INTEGER NOT NULL,
@@ -96,26 +161,8 @@ CREATE TABLE IF NOT EXISTS conversations (
   updated_at     INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS messages (
-  id         TEXT PRIMARY KEY,
-  conv_id    TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  seq        INTEGER NOT NULL,
-  sender     TEXT NOT NULL CHECK (sender IN ('me', 'fish')),
-  kind       TEXT NOT NULL CHECK (kind IN ('text', 'sticker', 'voice', 'system')),
-  text       TEXT,
-  sticker_id TEXT,
-  voice_ms   INTEGER,
-  -- 现在不存音频。这一列是给以后把语音加回来留的（对象键或文件相对路径）。
-  audio_ref  TEXT,
-  reply_to   TEXT,
-  source     TEXT NOT NULL DEFAULT 'web',
-  client_id  TEXT,
-  created_at INTEGER NOT NULL,
-  UNIQUE (conv_id, seq),
-  UNIQUE (client_id)
-);
-CREATE INDEX IF NOT EXISTS idx_messages_conv_seq ON messages(conv_id, seq DESC);
-CREATE INDEX IF NOT EXISTS idx_messages_sticker ON messages(sticker_id);
+${MESSAGES_TABLE}
+${MESSAGES_INDEXES}
 
 CREATE TABLE IF NOT EXISTS stickers (
   id         TEXT PRIMARY KEY,
@@ -133,6 +180,8 @@ CREATE TABLE IF NOT EXISTS stickers (
 );
 CREATE INDEX IF NOT EXISTS idx_stickers_live ON stickers(deleted_at, created_at);
 
+${ATTACHMENTS_TABLE}
+
 CREATE TABLE IF NOT EXISTS calls (
   id         TEXT PRIMARY KEY,
   kind       TEXT NOT NULL,
@@ -141,6 +190,25 @@ CREATE TABLE IF NOT EXISTS calls (
   created_at INTEGER NOT NULL,
   ended_at   INTEGER
 );
+`
+
+/** v1 → v2：消息表加 attachment_id、放开 kind 的 CHECK、加附件表。 */
+const MIGRATE_1_TO_2 = `
+ALTER TABLE messages RENAME TO messages_v1;
+
+${MESSAGES_TABLE}
+
+INSERT INTO messages
+  (id, conv_id, seq, sender, kind, text, sticker_id, attachment_id, voice_ms, audio_ref, reply_to, source, client_id, created_at)
+SELECT
+  id, conv_id, seq, sender, kind, text, sticker_id, NULL, voice_ms, audio_ref, reply_to, source, client_id, created_at
+FROM messages_v1;
+
+DROP TABLE messages_v1;
+
+${MESSAGES_INDEXES}
+
+${ATTACHMENTS_TABLE}
 `
 
 /** 一条会话的当前水位（下一个 seq 该给多少）。 */

@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { createReadStream, existsSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify'
 import cookie from '@fastify/cookie'
@@ -27,6 +27,15 @@ import {
 import { Hub } from './services/hub.js'
 import { createMessage, findMessage, listBefore, listSince } from './services/messages.js'
 import { MockFish } from './services/mockFish.js'
+import {
+  AttachmentError,
+  attachmentFilePath,
+  attachmentThumbPath,
+  createAttachment,
+  getAttachmentInfo,
+  getAttachmentRow,
+  openAttachment,
+} from './services/attachments.js'
 import {
   StickerError,
   createSticker,
@@ -63,6 +72,37 @@ function fileTooLargeMessage(maxBytes: number): string {
   return `这张太大了，最多 ${Math.round(maxBytes / 1024 / 1024)} MB`
 }
 
+/**
+ * 解析 `Range: bytes=…`（Safari 播视频必须）。
+ * 拿不到范围返回 null，范围写得不对返回 'invalid'。
+ */
+function parseRange(
+  header: string | undefined,
+  size: number,
+): { start: number; end: number } | null | 'invalid' {
+  if (!header) return null
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim())
+  if (!match) return 'invalid'
+  const startRaw = match[1] ?? ''
+  const endRaw = match[2] ?? ''
+  if (!startRaw && !endRaw) return 'invalid'
+
+  let start: number
+  let end: number
+  if (!startRaw) {
+    const suffix = Number(endRaw)
+    if (!Number.isFinite(suffix) || suffix <= 0) return 'invalid'
+    start = Math.max(0, size - suffix)
+    end = size - 1
+  } else {
+    start = Number(startRaw)
+    end = endRaw ? Number(endRaw) : size - 1
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 'invalid'
+  if (start < 0 || start >= size || end < start) return 'invalid'
+  return { start, end: Math.min(end, size - 1) }
+}
+
 function peerOf(config: AppConfig): PeerInfo {
   return { name: config.peer.name, avatar: config.peer.avatar }
 }
@@ -87,7 +127,12 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
   app.register(cookie)
   app.register(multipart, {
     limits: {
-      fileSize: config.sticker.maxBytes,
+      fileSize: Math.max(
+        config.sticker.maxBytes,
+        config.attachment.imageMaxBytes,
+        config.attachment.videoMaxBytes,
+        config.attachment.fileMaxBytes,
+      ),
       files: 1,
       fieldSize: 1024,
     },
@@ -259,12 +304,14 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
     if (!clientId) return fail(reply, 400, 'client_id_required', '要给一个 clientId，重发才不会变成两条')
 
     const kind = String(body.kind ?? 'text')
-    if (kind !== 'text' && kind !== 'sticker') {
-      return fail(reply, 400, 'kind_not_ready', `${kind} 还没做，现在能发文字和表情`)
+    const allowed = ['text', 'sticker', 'image', 'video', 'file']
+    if (!allowed.includes(kind)) {
+      return fail(reply, 400, 'kind_not_ready', `${kind} 还没做，现在能发文字、表情、图片、视频、文件`)
     }
 
     let text: string | null = null
     let stickerId: string | null = null
+    let attachmentId: string | null = null
 
     if (kind === 'text') {
       text = String(body.text ?? '').trim()
@@ -272,11 +319,19 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
       if (text.length > LIMITS.messageMaxChars) {
         return fail(reply, 400, 'too_long', `一条最多 ${LIMITS.messageMaxChars} 字`)
       }
-    } else {
+    } else if (kind === 'sticker') {
       stickerId = String(body.stickerId ?? '').trim()
       if (!stickerId) return fail(reply, 400, 'sticker_required', '表情消息要带 stickerId')
       if (!liveStickerInfo(db, stickerId)) {
         return fail(reply, 400, 'bad_sticker', '这个表情不在了')
+      }
+    } else {
+      attachmentId = String(body.attachmentId ?? '').trim()
+      if (!attachmentId) return fail(reply, 400, 'attachment_required', '附件消息要带 attachmentId')
+      const attachment = getAttachmentInfo(db, attachmentId)
+      if (!attachment) return fail(reply, 400, 'bad_attachment', '这个附件不在了')
+      if (attachment.kind !== kind) {
+        return fail(reply, 400, 'attachment_kind_mismatch', `这是 ${attachment.kind}，不是 ${kind}`)
       }
     }
 
@@ -291,15 +346,16 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
     const { message, created } = createMessage(db, hub, {
       convId,
       sender: 'me',
-      kind,
+      kind: kind as 'text' | 'sticker' | 'image' | 'video' | 'file',
       text,
       stickerId,
+      attachmentId,
       replyTo,
       source: 'web',
       clientId,
     })
 
-    if (created) mock.note(kind === 'text' ? (text ?? '') : '[表情]')
+    if (created) mock.note(kind === 'text' ? (text ?? '') : `[${kind}]`)
     return { ok: true, message, created }
   })
 
@@ -389,6 +445,87 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
       .header('content-type', row.mime)
       .header('cache-control', 'public, max-age=31536000, immutable')
       .send(openStickerFile(file))
+  })
+
+  // ── 附件（图片 / 视频 / 文件）─────────────────────────────────────
+  app.post('/api/attachments', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    if (!req.isMultipart()) return fail(reply, 400, 'bad_upload', '要用 multipart 传文件')
+
+    let part: MultipartFile | undefined
+    try {
+      part = await req.file()
+    } catch {
+      return fail(reply, 413, 'file_too_large', '这个文件太大了')
+    }
+    if (!part) return fail(reply, 400, 'no_file', '没收到文件')
+
+    let buffer: Buffer
+    try {
+      buffer = await part.toBuffer()
+    } catch (error) {
+      const code = String((error as { code?: string })?.code ?? '')
+      if (code === 'FST_REQ_FILE_TOO_LARGE') {
+        return fail(reply, 413, 'file_too_large', '这个文件太大了')
+      }
+      return fail(reply, 400, 'bad_upload', `文件没传完：${String((error as Error).message)}`)
+    }
+
+    try {
+      const attachment = await createAttachment(db, paths, config.attachment, {
+        buffer,
+        filename: part.filename,
+        mime: part.mimetype,
+      })
+      return { ok: true, attachment }
+    } catch (error) {
+      if (error instanceof AttachmentError) return fail(reply, error.status, error.code, error.message)
+      throw error
+    }
+  })
+
+  app.get('/api/attachments/:id/thumb', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    const row = getAttachmentRow(db, String((req.params as { id?: string }).id ?? ''))
+    if (!row) return fail(reply, 404, 'attachment_not_found', '没有这个附件')
+    const thumb = attachmentThumbPath(paths, row)
+    if (!thumb) return fail(reply, 404, 'thumb_missing', '这个附件没有缩略图')
+    return reply
+      .header('content-type', 'image/png')
+      .header('cache-control', 'public, max-age=31536000, immutable')
+      .send(createReadStream(thumb))
+  })
+
+  app.get('/api/attachments/:id/file', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    const row = getAttachmentRow(db, String((req.params as { id?: string }).id ?? ''))
+    if (!row) return fail(reply, 404, 'attachment_not_found', '没有这个附件')
+    const file = attachmentFilePath(paths, row)
+    if (!file) return fail(reply, 404, 'file_missing', '文件不在了')
+
+    const size = statSync(file).size
+    const disposition = row.kind === 'file' ? 'attachment' : 'inline'
+    reply
+      .header('content-type', row.mime)
+      .header('accept-ranges', 'bytes')
+      .header('cache-control', 'public, max-age=31536000, immutable')
+      .header('content-disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(row.name)}`)
+
+    const range = parseRange(req.headers.range, size)
+    if (range === 'invalid') {
+      return reply.code(416).header('content-range', `bytes */${size}`).send()
+    }
+    if (range) {
+      return reply
+        .code(206)
+        .header('content-range', `bytes ${range.start}-${range.end}/${size}`)
+        .header('content-length', String(range.end - range.start + 1))
+        .send(openAttachment(file, range))
+    }
+    return reply.header('content-length', String(size)).send(openAttachment(file))
   })
 
   app.post('/api/typing', async (req, reply) => {

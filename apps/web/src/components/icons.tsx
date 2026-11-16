@@ -76,3 +76,22 @@ export function CloseIcon(props: IconProps) {
     </svg>
   )
 }
+
+export function ImageIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+      <circle cx="8.5" cy="10" r="1.6" />
+      <path d="M4 17.5l5-5 4 4 3-3 4 4" />
+    </svg>
+  )
+}
+
+export function FileIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M13.5 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9Z" />
+      <path d="M13.5 3.5V9H19" />
+    </svg>
+  )
+}

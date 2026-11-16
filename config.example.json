@@ -17,6 +17,11 @@
     "maxBytes": 5242880,
     "maxCount": 100
   },
+  "attachment": {
+    "imageMaxBytes": 10485760,
+    "videoMaxBytes": 52428800,
+    "fileMaxBytes": 52428800
+  },
   "mock": {
     "enabled": true,
     "mergeWindowMs": 2000,

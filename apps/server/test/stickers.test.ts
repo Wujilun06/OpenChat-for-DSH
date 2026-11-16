@@ -26,6 +26,7 @@ const config: AppConfig = {
   dataDir: 'unused',
   session: { days: 30 },
   sticker: { maxBytes: 64 * 1024, maxCount: 3 },
+  attachment: { imageMaxBytes: 64 * 1024, videoMaxBytes: 64 * 1024, fileMaxBytes: 64 * 1024 },
   mock: { enabled: false, mergeWindowMs: 10, typingMs: 10, gapMs: 10 },
 }
 

@@ -273,6 +273,9 @@ button {
   background: var(--oc-bubble-peer);
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .msg.me .bubble {
@@ -656,4 +659,168 @@ button {
 
 .sheet-note.error {
   color: var(--oc-danger);
+}
+
+/* ---------- 图片 / 视频 / 文件 ---------- */
+.image-bubble {
+  padding: 3px;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.msg.me .image-bubble {
+  background: #fff;
+}
+
+.image-bubble::after {
+  display: none;
+}
+
+.image-img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+}
+
+.media-bubble {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.media-bubble::after {
+  display: none;
+}
+
+.video-el {
+  display: block;
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 10px;
+  background: #000;
+}
+
+.file-bubble {
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.msg.me .file-bubble {
+  background: #fff;
+}
+
+.msg.me .file-bubble::after {
+  border-left-color: #fff;
+}
+
+.file-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 150px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.file-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.06);
+  color: #555;
+}
+
+.file-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.file-name {
+  max-width: 160px;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size {
+  color: var(--oc-sub);
+  font-size: 11px;
+}
+
+/* ---------- 加号菜单 ---------- */
+.plus-sheet {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+.plus-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  padding: 8px 0 4px;
+}
+
+.plus-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 0;
+  background: none;
+}
+
+.plus-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: #fff;
+  color: #444;
+}
+
+.plus-label {
+  color: #666;
+  font-size: 11px;
+}
+
+/* ---------- 看原图 ---------- */
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.92);
+}
+
+.viewer img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.viewer-close {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
 }
