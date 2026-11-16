@@ -54,7 +54,7 @@ scripts/         图标生成、开机自启
 - 密码明文放 `config.json`，所以这个文件不能提交、不能截图发人。
 - 登录失败 5 次锁 15 分钟（同一个 IP）。
 - 会话 cookie 是 HttpOnly + SameSite=Lax，https 下自动带 Secure。
-- 要走公网（Tailscale Funnel）之前，**必须先把 `openchat` 这个默认密码改掉**。
+- 要走公网（Tailscale Funnel）之前，**必须先把 `config.json` 里那个临时密码改掉**。
 
 ## 里程碑
 
