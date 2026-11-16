@@ -84,13 +84,14 @@ test('2 秒窗口内连发两句，只回一轮', async () => {
   const items = list.json().items as Array<{ sender: string; source: string; text: string }>
   const fish = items.filter((m) => m.sender === 'fish')
 
-  assert.equal(items.length, 4, `应该是 2 句人话 + 2 段回答，实际 ${items.length}`)
-  assert.equal(fish.length, 2)
+  // 2 句人话 + 一轮回答（回答不再带「收到：…」那种回声）
+  assert.equal(items.length, 3, `应该是 2 句人话 + 1 段回答，实际 ${items.length}`)
+  assert.equal(fish.length, 1)
   assert.equal(fish[0]?.source, 'mock')
-  assert.match(fish[0]?.text ?? '', /收到 2 句/)
+  assert.equal(fish[0]?.text, '这条是占位回答，接上 DSH 以后就换成真的了。')
 })
 
-test('假鱼回答是分段落库的，中间有间隔', async () => {
+test('回答是一个一个落库的，seq 跟着往下走', async () => {
   const list = await app.inject({
     method: 'GET',
     url: '/api/messages?limit=50',
@@ -98,8 +99,7 @@ test('假鱼回答是分段落库的，中间有间隔', async () => {
   })
   const items = list.json().items as Array<{ sender: string; createdAt: number; seq: number }>
   const fish = items.filter((m) => m.sender === 'fish')
-  assert.equal(fish.length, 2)
-  const gap = Number(fish[1]?.createdAt) - Number(fish[0]?.createdAt)
-  assert.ok(gap >= 0, '两段之间不该是负数')
-  assert.ok(Number(fish[1]?.seq) > Number(fish[0]?.seq))
+  assert.equal(fish.length, 1)
+  assert.ok(Number(fish[0]?.seq) > Number(items[1]?.seq))
+  assert.ok(Number(fish[0]?.createdAt) >= Number(items[1]?.createdAt))
 })

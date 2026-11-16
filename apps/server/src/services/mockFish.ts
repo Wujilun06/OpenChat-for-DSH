@@ -108,15 +108,7 @@ export class MockFish {
   }
 }
 
-function buildParts(texts: string[]): string[] {
-  const head =
-    texts.length === 1
-      ? `（假鱼回声）收到：「${trim(texts[0] ?? '', 30)}」`
-      : `（假鱼回声）收到 ${texts.length} 句，先记着。`
-  return [head, '这条是占位回答，接上 DSH 以后就换成真的了。']
-}
-
-function trim(text: string, max: number): string {
-  const clean = text.replace(/\s+/g, ' ').trim()
-  return clean.length > max ? `${clean.slice(0, max)}…` : clean
+function buildParts(_texts: string[]): string[] {
+  // 那句「收到：…」拿掉了 —— 它只是回声，看着像在复读。
+  return ['这条是占位回答，接上 DSH 以后就换成真的了。']
 }

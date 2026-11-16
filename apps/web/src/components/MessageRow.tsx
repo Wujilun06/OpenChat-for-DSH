@@ -22,8 +22,9 @@ export function MessageRow({
   onQuote,
 }: MessageRowProps) {
   const isMe = message.sender === 'me'
+  // 0 不显示（默认），1 时分秒，2 年月日时分秒
   const timeText =
-    timeLevel === 0 ? formatClock(message.createdAt) : timeLevel === 1 ? formatFull(message.createdAt) : ''
+    timeLevel === 1 ? formatClock(message.createdAt) : timeLevel === 2 ? formatFull(message.createdAt) : ''
 
   const cycle = () => onCycleTime(message.id)
 
