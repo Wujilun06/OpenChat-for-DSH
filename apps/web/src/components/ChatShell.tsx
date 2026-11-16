@@ -463,6 +463,10 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
 
   const startRecording = async () => {
     if (recording || sending) return
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      flash('要 https 或 localhost 才能用麦克风')
+      return
+    }
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       flash('这个浏览器不支持录音')
       return
@@ -506,8 +510,17 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
         setRecordMs(ms)
         if (ms >= 60_000) stopRecording(true)
       }, 200)
-    } catch {
-      flash('拿不到麦克风权限')
+    } catch (error) {
+      const name = String((error as { name?: string })?.name ?? '')
+      if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        flash('这台机器没有麦克风（或没插）')
+      } else if (name === 'NotAllowedError' || name === 'SecurityError') {
+        flash('麦克风被浏览器拦了，点地址栏左边的锁放行一下')
+      } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+        flash('麦克风被别的程序占着')
+      } else {
+        flash(`打不开麦克风：${name || '未知错误'}`)
+      }
     }
   }
 
