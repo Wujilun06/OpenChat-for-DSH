@@ -23,6 +23,7 @@ const config: AppConfig = {
   sticker: { maxBytes: 5 * 1024 * 1024, maxCount: 100 },
   attachment: { imageMaxBytes: 5 * 1024 * 1024, videoMaxBytes: 5 * 1024 * 1024, fileMaxBytes: 5 * 1024 * 1024 },
   media: { ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' },
+  asr: { enabled: false, threads: 4, python: '', modelDir: '', timeoutMs: 120000 },
   mock: { enabled: false, mergeWindowMs: 10, typingMs: 10, gapMs: 10 },
 }
 

@@ -6,6 +6,7 @@ import { StickerPanel } from './StickerPanel'
 import { PlusMenu } from './PlusMenu'
 import { MediaViewer } from './MediaViewer'
 import { refLabel } from '../lib/preview'
+import { formatDuration } from '../lib/time'
 import { CloseIcon, MicIcon, MoreIcon, PlusIcon, SmileIcon } from './icons'
 
 export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void }) {
@@ -27,6 +28,9 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
   const [stickerError, setStickerError] = useState('')
   const [plusOpen, setPlusOpen] = useState(false)
   const [viewer, setViewer] = useState<AttachmentInfo | null>(null)
+  const [recording, setRecording] = useState(false)
+  const [recordMs, setRecordMs] = useState(0)
+  const [asrReady, setAsrReady] = useState<boolean | null>(null)
 
   const lastSeqRef = useRef(me.conversation.lastSeq)
   const stickRef = useRef(true)
@@ -35,6 +39,12 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTypingPing = useRef(0)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const recordStartRef = useRef(0)
+  const cancelledRef = useRef(false)
 
   const flash = useCallback((text: string) => {
     setToast(text)
@@ -196,6 +206,36 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
     return () => {
       if (toastTimer.current) clearTimeout(toastTimer.current)
       if (typingTimer.current) clearTimeout(typingTimer.current)
+    }
+  }, [])
+
+  // 转写装没装好，决定麦克风能不能点
+  useEffect(() => {
+    let alive = true
+    api
+      .health()
+      .then((health) => {
+        if (alive) setAsrReady(health.asr === 'ready')
+      })
+      .catch(() => {
+        if (alive) setAsrReady(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // 离开页面把录音停掉、麦克风放开
+  useEffect(() => {
+    return () => {
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+      cancelledRef.current = true
+      try {
+        recorderRef.current?.stop()
+      } catch {
+        // 已经停了
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop())
     }
   }, [])
 
@@ -374,6 +414,103 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
     }
   }
 
+  const pickAudioMime = (): string => {
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac']
+    if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+      return ''
+    }
+    return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? ''
+  }
+
+  const stopRecordTimer = () => {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current)
+      recordTimerRef.current = null
+    }
+  }
+
+  const uploadVoice = async (blob: Blob) => {
+    if (sending) return
+    setSending(true)
+    flash('转写中…')
+    try {
+      const res = await api.sendVoice(blob, {
+        clientId: crypto.randomUUID(),
+        replyTo: replyTo?.id ?? null,
+      })
+      append([res.message])
+      setReplyTo(null)
+      stickRef.current = true
+      scrollToBottom()
+      clearToast()
+    } catch (err) {
+      flash(err instanceof ApiError ? err.message : '转写失败')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const stopRecording = (send: boolean) => {
+    const recorder = recorderRef.current
+    if (!recorder) return
+    cancelledRef.current = !send
+    stopRecordTimer()
+    if (recorder.state !== 'inactive') recorder.stop()
+    else setRecording(false)
+  }
+
+  const cancelRecording = () => stopRecording(false)
+
+  const startRecording = async () => {
+    if (recording || sending) return
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      flash('这个浏览器不支持录音')
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mime = pickAudioMime()
+      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream)
+
+      streamRef.current = stream
+      recorderRef.current = recorder
+      chunksRef.current = []
+      cancelledRef.current = false
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data)
+      }
+      recorder.onstop = () => {
+        const type = recorder.mimeType || mime || 'audio/webm'
+        const blob = new Blob(chunksRef.current, { type })
+        chunksRef.current = []
+        stream.getTracks().forEach((track) => track.stop())
+        streamRef.current = null
+        recorderRef.current = null
+        stopRecordTimer()
+        setRecording(false)
+        if (cancelledRef.current) return
+        if (blob.size < 1200) {
+          flash('太短了，多说两句')
+          return
+        }
+        void uploadVoice(blob)
+      }
+
+      recorder.start()
+      setRecording(true)
+      setRecordMs(0)
+      recordStartRef.current = Date.now()
+      recordTimerRef.current = setInterval(() => {
+        const ms = Date.now() - recordStartRef.current
+        setRecordMs(ms)
+        if (ms >= 60_000) stopRecording(true)
+      }, 200)
+    } catch {
+      flash('拿不到麦克风权限')
+    }
+  }
+
   return (
     <div className="chat">
       <header className="chat-header">
@@ -444,8 +581,27 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
           </div>
         ) : null}
 
-        <div className="composer-row">
-          <button className="tool" type="button" disabled title="语音消息（P3）">
+        {recording ? (
+          <div className="record-bar">
+            <span className="record-dot" />
+            <span className="record-time">{formatDuration(recordMs)} / 1:00</span>
+            <button className="record-cancel" type="button" onClick={cancelRecording}>
+              取消
+            </button>
+            <button className="record-send" type="button" onClick={() => stopRecording(true)}>
+              发送
+            </button>
+          </div>
+        ) : (
+          <div className="composer-row">
+          <button
+            className="tool"
+            type="button"
+            disabled={sending || asrReady === false}
+            title={asrReady === false ? '转写还没装好' : '不说话就点一下开始录'}
+            aria-label="语音消息"
+            onClick={() => void startRecording()}
+          >
             <MicIcon />
           </button>
           <textarea
@@ -490,7 +646,8 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
           <button className="send" type="button" disabled={!draft.trim() || sending} onClick={() => void send()}>
             发送
           </button>
-        </div>
+          </div>
+        )}
       </footer>
 
       {plusOpen ? (

@@ -27,6 +27,7 @@ import {
 import { Hub } from './services/hub.js'
 import { createMessage, findMessage, listBefore, listSince } from './services/messages.js'
 import { MockFish } from './services/mockFish.js'
+import { createVoiceService, VoiceError, type VoiceService } from './services/voice.js'
 import {
   AttachmentError,
   attachmentFilePath,
@@ -54,6 +55,8 @@ export interface AppDeps {
   config: AppConfig
   paths: AppPaths
   db: DatabaseSync
+  /** 测试里塞假转写；平时不传，按配置自己建。 */
+  voice?: VoiceService
 }
 
 interface ConversationRow {
@@ -183,7 +186,7 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
       version: APP_VERSION,
       node: process.version,
       db: 'ok',
-      asr: 'not_installed',
+      asr: voice.ready() ? 'ready' : 'not_installed',
       time: Date.now(),
     }
   })
@@ -252,6 +255,7 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
 
   const hub = new Hub()
   const mock = new MockFish({ db, hub, convId, config: config.mock })
+  const voice = deps.voice ?? createVoiceService(paths, config)
 
   const parseLimit = (raw: unknown, fallback: number): number => {
     const n = Number(raw)
@@ -526,6 +530,65 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
         .send(openAttachment(file, range))
     }
     return reply.header('content-length', String(size)).send(openAttachment(file))
+  })
+
+  // ── 语音消息：上传录音 → 转写 → 只存文字和时长 ──────────────────
+  app.post('/api/messages/voice', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    if (!req.isMultipart()) return fail(reply, 400, 'bad_upload', '要用 multipart 传音频')
+
+    const query = (req.query ?? {}) as Record<string, unknown>
+    const clientId = String(query.clientId ?? '').trim()
+    if (!clientId) {
+      return fail(reply, 400, 'client_id_required', '要给一个 clientId，重发才不会变成两条')
+    }
+
+    let replyTo: string | null = null
+    if (query.replyTo) {
+      replyTo = String(query.replyTo)
+      if (!findMessage(db, replyTo)) {
+        return fail(reply, 400, 'bad_reply_to', '引用的那条消息不在了')
+      }
+    }
+
+    let part: MultipartFile | undefined
+    try {
+      part = await req.file()
+    } catch {
+      return fail(reply, 413, 'audio_too_large', '录音太大了')
+    }
+    if (!part) return fail(reply, 400, 'no_file', '没收到音频')
+
+    let buffer: Buffer
+    try {
+      buffer = await part.toBuffer()
+    } catch (error) {
+      const code = String((error as { code?: string })?.code ?? '')
+      if (code === 'FST_REQ_FILE_TOO_LARGE') {
+        return fail(reply, 413, 'audio_too_large', '录音太大了')
+      }
+      return fail(reply, 400, 'bad_upload', `音频没传完：${String((error as Error).message)}`)
+    }
+
+    try {
+      const result = await voice.transcribe({ buffer, mime: part.mimetype })
+      const { message, created } = createMessage(db, hub, {
+        convId,
+        sender: 'me',
+        kind: 'voice',
+        text: result.text,
+        voiceMs: result.durationMs,
+        replyTo,
+        source: 'web',
+        clientId,
+      })
+      if (created) mock.note('[语音]')
+      return { ok: true, message, created }
+    } catch (error) {
+      if (error instanceof VoiceError) return fail(reply, error.status, error.code, error.message)
+      throw error
+    }
   })
 
   app.post('/api/typing', async (req, reply) => {

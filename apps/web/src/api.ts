@@ -125,4 +125,16 @@ export const api = {
       body: form,
     })
   },
+
+  sendVoice: (blob: Blob, input: { clientId: string; replyTo?: string | null }) => {
+    const form = new FormData()
+    const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : 'webm'
+    form.append('file', blob, `voice.${ext}`)
+    const query = new URLSearchParams({ clientId: input.clientId })
+    if (input.replyTo) query.set('replyTo', input.replyTo)
+    return request<{ ok: true; message: MessageInfo; created: boolean }>(
+      `/api/messages/voice?${query.toString()}`,
+      { method: 'POST', body: form },
+    )
+  },
 }

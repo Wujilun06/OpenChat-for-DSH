@@ -37,6 +37,14 @@ export interface AppConfig {
     ffmpeg: string
     ffprobe: string
   }
+  /** 语音转写。python / modelDir 留空就用 runtime/asr 下的默认位置。 */
+  asr: {
+    enabled: boolean
+    threads: number
+    python: string
+    modelDir: string
+    timeoutMs: number
+  }
   /** 假鱼回声。接上 DSH 以后把它关掉。 */
   mock: {
     enabled: boolean
@@ -59,6 +67,11 @@ export interface AppPaths {
   thumbsDir: string
   filesDir: string
   fileThumbsDir: string
+  tmpDir: string
+  asrDir: string
+  asrPython: string
+  asrModelDir: string
+  asrScript: string
   webDist: string
 }
 
@@ -76,6 +89,7 @@ export function findRoot(from = import.meta.dirname): string {
 
 export function resolvePaths(root: string, config: AppConfig, configFile: string): AppPaths {
   const dataDir = isAbsolute(config.dataDir) ? config.dataDir : resolve(root, config.dataDir)
+  const asrDir = resolve(root, 'runtime/asr')
   return {
     root,
     configFile,
@@ -85,6 +99,14 @@ export function resolvePaths(root: string, config: AppConfig, configFile: string
     thumbsDir: resolve(dataDir, 'thumbs'),
     filesDir: resolve(dataDir, 'files'),
     fileThumbsDir: resolve(dataDir, 'file-thumbs'),
+    tmpDir: resolve(dataDir, 'tmp'),
+    asrDir,
+    asrPython:
+      process.platform === 'win32'
+        ? resolve(asrDir, '.venv/Scripts/python.exe')
+        : resolve(asrDir, '.venv/bin/python'),
+    asrModelDir: resolve(asrDir, 'models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17'),
+    asrScript: resolve(root, 'asr/asr_cli.py'),
     webDist: resolve(root, 'apps/web/dist'),
   }
 }
@@ -131,6 +153,7 @@ function normalize(value: unknown, where: string): AppConfig {
   const sticker = (v.sticker ?? {}) as Record<string, unknown>
   const attachment = (v.attachment ?? {}) as Record<string, unknown>
   const media = (v.media ?? {}) as Record<string, unknown>
+  const asr = (v.asr ?? {}) as Record<string, unknown>
   const mock = (v.mock ?? {}) as Record<string, unknown>
 
   const password = String(v.password ?? '')
@@ -178,6 +201,13 @@ function normalize(value: unknown, where: string): AppConfig {
       ffmpeg: String(media.ffmpeg ?? 'ffmpeg'),
       ffprobe: String(media.ffprobe ?? 'ffprobe'),
     },
+    asr: {
+      enabled: asr.enabled !== false,
+      threads: clampInt(asr.threads, 1, 16, 4),
+      python: String(asr.python ?? ''),
+      modelDir: String(asr.modelDir ?? ''),
+      timeoutMs: clampInt(asr.timeoutMs, 5_000, 300_000, 120_000),
+    },
   }
 }
 
@@ -194,6 +224,7 @@ export function ensureDirs(paths: AppPaths): void {
     paths.thumbsDir,
     paths.filesDir,
     paths.fileThumbsDir,
+    paths.tmpDir,
   ]) {
     mkdirSync(dir, { recursive: true })
   }

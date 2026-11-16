@@ -50,6 +50,16 @@ Cookie 名 `oc_session`：HttpOnly、SameSite=Lax、https 下带 Secure、
 一条用户消息落库之后，服务端等 2 秒（`mock.mergeWindowMs`）再开始回：
 这 2 秒内连发的几句会算成一轮。假鱼正在回的时候你再发，排在下一轮。
 
+### POST /api/messages/voice
+
+`multipart/form-data`，字段 `file` 放录音；query 带 `clientId`，可选 `replyTo`。
+
+流程：临时落盘 → ffmpeg 转 16k 单声道 wav → SenseVoice 转写 → **删掉临时音频** →
+落一条 `kind: 'voice'`。响应里的 `message.text` 是转写结果，`voiceMs` 是时长。
+
+错误：`asr_not_ready`(503，还没装转写)、`audio_too_large`(413)、`bad_audio`(400)、
+`voice_too_long`(400)、`asr_empty`(422，没听清)、`asr_failed`(500)。
+
 ## 表情（P2 已实现）
 
 | 方法 | 路径 | 干什么 |

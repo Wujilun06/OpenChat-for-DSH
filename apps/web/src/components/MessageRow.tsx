@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import type { AttachmentInfo, MessageInfo, Sender } from '@openchat/shared'
-import { formatClock, formatFull } from '../lib/time'
+import { formatClock, formatFull, formatVoiceSeconds } from '../lib/time'
 import { formatBytes, refLabel } from '../lib/preview'
-import { FileIcon } from './icons'
+import { FileIcon, MicIcon } from './icons'
 
 export interface MessageRowProps {
   message: MessageInfo
@@ -56,7 +56,9 @@ export function MessageRow({
   const attachment = message.attachment
   const isImage = message.kind === 'image' && attachment !== null
   const isVideo = message.kind === 'video' && attachment !== null
+  const isVoice = message.kind === 'voice'
   const mediaBox = attachment && (isImage || isVideo) ? thumbBox(attachment.w, attachment.h) : null
+  const voiceWidth = Math.min(160, Math.max(90, 70 + Math.round((message.voiceMs ?? 0) / 1000) * 4))
 
   const timeText =
     timeLevel === 1 ? formatClock(message.createdAt) : timeLevel === 2 ? formatFull(message.createdAt) : ''
@@ -81,6 +83,7 @@ export function MessageRow({
     sticker ? 'sticker-bubble' : '',
     isImage ? 'image-bubble' : '',
     isVideo ? 'video-bubble' : '',
+    isVoice ? 'voice-bubble' : '',
     message.kind === 'file' ? 'file-bubble' : '',
   ]
     .filter(Boolean)
@@ -129,6 +132,7 @@ export function MessageRow({
 
         <div
           className={bubbleClass}
+          style={isVoice ? { width: `${voiceWidth}px` } : undefined}
           role="button"
           tabIndex={0}
           title={hint}
@@ -210,6 +214,11 @@ export function MessageRow({
                 <PlayBadge />
               </span>
             </div>
+          ) : isVoice ? (
+            <span className="voice-inner">
+              <MicIcon width={17} height={17} />
+              <span className="voice-sec">{formatVoiceSeconds(message.voiceMs ?? 0)}</span>
+            </span>
           ) : message.kind === 'file' && attachment ? (
             <a
               className="file-card"
@@ -230,6 +239,8 @@ export function MessageRow({
             <div className="bubble-text">{message.text}</div>
           )}
         </div>
+
+        {isVoice && message.text ? <div className="voice-text">{message.text}</div> : null}
       </div>
 
       {isMe ? <div className="msg-avatar me-avatar">我</div> : null}

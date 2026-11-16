@@ -1,4 +1,4 @@
-<#
+﻿<#
   给 OpenChat 配开机自启（Windows 计划任务）。
 
   装：  powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1

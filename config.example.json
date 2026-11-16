@@ -26,6 +26,13 @@
     "ffmpeg": "ffmpeg",
     "ffprobe": "ffprobe"
   },
+  "asr": {
+    "enabled": true,
+    "threads": 4,
+    "python": "",
+    "modelDir": "",
+    "timeoutMs": 120000
+  },
   "mock": {
     "enabled": true,
     "mergeWindowMs": 2000,

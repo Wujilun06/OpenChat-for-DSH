@@ -3,10 +3,10 @@
 一个自己的网页聊天，最后要能塞进一个更大的面板里。做一个的理由很实在：
 QQ 那条线（NapCat / OneBot）哪天坏了，还能找得到鱼。
 
-现在做到 **P2.5**：登录、SQLite、PWA 壳、文字聊天（左右气泡、引用回复、
+现在做到 **P3**：登录、SQLite、PWA 壳、文字聊天（左右气泡、引用回复、
 正在输入、时间戳三档、断线补齐、连发合并）、表情（上传、共享池、GIF 首帧缩略图、
 软删、发送）、图片/视频/文件消息（加号菜单、视频首帧 + 播放角标、点开按画幅放大、
-右键/长按引用）。
+右键/长按引用）、语音消息（录音 → 转写 → 只存文字和时长）。
 回答现在是 `config.mock` 里的假鱼回声；接上 DSH 之后关掉它就行。
 
 ## 快速开始
@@ -18,6 +18,12 @@ npm run dev                          # server :8787 + vite :5173
 ```
 
 打开 http://127.0.0.1:5173 。开发时 vite 把 `/api` 转到 8787。
+
+语音要转写的话，再跑一次（会下约 900MB 的模型包）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-asr.ps1
+```
 
 生产：
 
@@ -36,6 +42,9 @@ npm start            # 只开 :8787，前端从 apps/web/dist 出
 
 `media.ffmpeg` / `media.ffprobe` 是抽视频首帧用的；机器上没装就把视频缩略图关掉，
 其余功能不受影响。
+
+`asr` 那些是语音转写：`enabled` 关掉麦克风就没法用；`python` / `modelDir` 留空就用
+`runtime/asr/` 下的默认位置；`threads` 是转写线程数。
 
 `dataDir` 默认是仓库下的 `data/`，里面会有 `openchat.db`、`stickers/`、`thumbs/`。
 
@@ -63,5 +72,5 @@ scripts/         图标生成、开机自启
 
 ## 里程碑
 
-P0 骨架 ✅ → P1 文字聊天 ✅ → P2 表情 ✅ → P2.5 附件与交互 ✅ → P3 语音（转写，不存音频）→ P4 通话占位 → P5 接 DSH。
+P0 骨架 ✅ → P1 文字聊天 ✅ → P2 表情 ✅ → P2.5 附件与交互 ✅ → P3 语音（转写，不存音频）✅ → P4 通话占位 → P5 接 DSH。
 细节和验收标准在 [docs/milestones.md](docs/milestones.md)。
