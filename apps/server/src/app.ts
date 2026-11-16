@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify'
 import cookie from '@fastify/cookie'
 import fastifyStatic from '@fastify/static'
+import multipart, { type MultipartFile } from '@fastify/multipart'
 import type { DatabaseSync } from 'node:sqlite'
 import type {
   ApiError,
@@ -26,6 +27,17 @@ import {
 import { Hub } from './services/hub.js'
 import { createMessage, findMessage, listBefore, listSince } from './services/messages.js'
 import { MockFish } from './services/mockFish.js'
+import {
+  StickerError,
+  createSticker,
+  getStickerRow,
+  listStickers,
+  liveStickerInfo,
+  openStickerFile,
+  softDeleteSticker,
+  stickerFilePath,
+  stickerThumbPath,
+} from './services/stickers.js'
 
 export const APP_VERSION = '0.1.0'
 
@@ -45,6 +57,10 @@ interface ConversationRow {
 function fail(reply: FastifyReply, status: number, code: string, message: string) {
   const body: ApiError = { ok: false, code, message }
   return reply.code(status).send(body)
+}
+
+function fileTooLargeMessage(maxBytes: number): string {
+  return `这张太大了，最多 ${Math.round(maxBytes / 1024 / 1024)} MB`
 }
 
 function peerOf(config: AppConfig): PeerInfo {
@@ -69,6 +85,13 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
   })
 
   app.register(cookie)
+  app.register(multipart, {
+    limits: {
+      fileSize: config.sticker.maxBytes,
+      files: 1,
+      fieldSize: 1024,
+    },
+  })
 
   const conversationOf = (): ConversationInfo => {
     const row = db
@@ -101,7 +124,10 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
   app.addHook('onSend', async (req, reply, payload) => {
     reply.header('x-content-type-options', 'nosniff')
     reply.header('referrer-policy', 'same-origin')
-    if (req.url.startsWith('/api/')) reply.header('cache-control', 'no-store')
+    // 表情图片自己带了 immutable 缓存头，别被这里盖成 no-store。
+    if (req.url.startsWith('/api/') && !reply.getHeader('cache-control')) {
+      reply.header('cache-control', 'no-store')
+    }
     return payload
   })
 
@@ -233,14 +259,25 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
     if (!clientId) return fail(reply, 400, 'client_id_required', '要给一个 clientId，重发才不会变成两条')
 
     const kind = String(body.kind ?? 'text')
-    if (kind !== 'text') {
-      return fail(reply, 400, 'kind_not_ready', `P1 只会发文字，${kind} 还没做`)
+    if (kind !== 'text' && kind !== 'sticker') {
+      return fail(reply, 400, 'kind_not_ready', `${kind} 还没做，现在能发文字和表情`)
     }
 
-    const text = String(body.text ?? '').trim()
-    if (!text) return fail(reply, 400, 'empty_message', '空消息不发')
-    if (text.length > LIMITS.messageMaxChars) {
-      return fail(reply, 400, 'too_long', `一条最多 ${LIMITS.messageMaxChars} 字`)
+    let text: string | null = null
+    let stickerId: string | null = null
+
+    if (kind === 'text') {
+      text = String(body.text ?? '').trim()
+      if (!text) return fail(reply, 400, 'empty_message', '空消息不发')
+      if (text.length > LIMITS.messageMaxChars) {
+        return fail(reply, 400, 'too_long', `一条最多 ${LIMITS.messageMaxChars} 字`)
+      }
+    } else {
+      stickerId = String(body.stickerId ?? '').trim()
+      if (!stickerId) return fail(reply, 400, 'sticker_required', '表情消息要带 stickerId')
+      if (!liveStickerInfo(db, stickerId)) {
+        return fail(reply, 400, 'bad_sticker', '这个表情不在了')
+      }
     }
 
     let replyTo: string | null = null
@@ -254,15 +291,104 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
     const { message, created } = createMessage(db, hub, {
       convId,
       sender: 'me',
-      kind: 'text',
+      kind,
       text,
+      stickerId,
       replyTo,
       source: 'web',
       clientId,
     })
 
-    if (created) mock.note(text)
+    if (created) mock.note(kind === 'text' ? (text ?? '') : '[表情]')
     return { ok: true, message, created }
+  })
+
+  // ── 表情 ───────────────────────────────────────────────────────────
+  app.get('/api/stickers', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    return { ok: true, items: listStickers(db), maxCount: config.sticker.maxCount }
+  })
+
+  app.post('/api/stickers', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    if (!req.isMultipart()) return fail(reply, 400, 'bad_upload', '要用 multipart 传文件')
+
+    let part: MultipartFile | undefined
+    try {
+      part = await req.file()
+    } catch (error) {
+      return fail(reply, 413, 'file_too_large', fileTooLargeMessage(config.sticker.maxBytes))
+    }
+    if (!part) return fail(reply, 400, 'no_file', '没收到文件')
+
+    let buffer: Buffer
+    try {
+      buffer = await part.toBuffer()
+    } catch (error) {
+      const code = String((error as { code?: string })?.code ?? '')
+      if (code === 'FST_REQ_FILE_TOO_LARGE') {
+        return fail(reply, 413, 'file_too_large', fileTooLargeMessage(config.sticker.maxBytes))
+      }
+      return fail(reply, 400, 'bad_upload', `文件没传完：${String((error as Error).message)}`)
+    }
+
+    try {
+      const sticker = await createSticker(
+        db,
+        paths,
+        { maxBytes: config.sticker.maxBytes, maxCount: config.sticker.maxCount },
+        { buffer, filename: part.filename },
+      )
+      return { ok: true, sticker }
+    } catch (error) {
+      if (error instanceof StickerError) return fail(reply, error.status, error.code, error.message)
+      throw error
+    }
+  })
+
+  app.delete('/api/stickers/:id', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    const id = String((req.params as { id?: string }).id ?? '')
+    if (!softDeleteSticker(db, id)) {
+      return fail(reply, 404, 'sticker_not_found', '没有这个表情')
+    }
+    return { ok: true }
+  })
+
+  app.get('/api/stickers/:id/thumb', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    const row = getStickerRow(db, String((req.params as { id?: string }).id ?? ''))
+    if (!row) return fail(reply, 404, 'sticker_not_found', '没有这个表情')
+    const thumb = stickerThumbPath(paths, row)
+    if (!thumb) {
+      const file = stickerFilePath(paths, row)
+      if (!file) return fail(reply, 404, 'file_missing', '文件不在了')
+      return reply
+        .header('content-type', row.mime)
+        .header('cache-control', 'public, max-age=31536000, immutable')
+        .send(openStickerFile(file))
+    }
+    return reply
+      .header('content-type', 'image/png')
+      .header('cache-control', 'public, max-age=31536000, immutable')
+      .send(openStickerFile(thumb))
+  })
+
+  app.get('/api/stickers/:id/file', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    const row = getStickerRow(db, String((req.params as { id?: string }).id ?? ''))
+    if (!row) return fail(reply, 404, 'sticker_not_found', '没有这个表情')
+    const file = stickerFilePath(paths, row)
+    if (!file) return fail(reply, 404, 'file_missing', '文件不在了')
+    return reply
+      .header('content-type', row.mime)
+      .header('cache-control', 'public, max-age=31536000, immutable')
+      .send(openStickerFile(file))
   })
 
   app.post('/api/typing', async (req, reply) => {

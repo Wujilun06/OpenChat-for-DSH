@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { MeResult, MessageInfo } from '@openchat/shared'
+import type { MeResult, MessageInfo, StickerInfo } from '@openchat/shared'
 import { ApiError, api } from '../api'
 import { MessageRow } from './MessageRow'
+import { StickerPanel } from './StickerPanel'
 import { CloseIcon, MicIcon, MoreIcon, PhoneIcon, PlusIcon, SmileIcon, VideoIcon } from './icons'
 
 export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void }) {
@@ -16,6 +17,11 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
   const [toast, setToast] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [timeLevels, setTimeLevels] = useState<Record<string, number>>({})
+  const [stickerOpen, setStickerOpen] = useState(false)
+  const [stickers, setStickers] = useState<StickerInfo[]>([])
+  const [stickerMax, setStickerMax] = useState(100)
+  const [stickersLoading, setStickersLoading] = useState(false)
+  const [stickerError, setStickerError] = useState('')
 
   const lastSeqRef = useRef(me.conversation.lastSeq)
   const stickRef = useRef(true)
@@ -261,6 +267,66 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
     setTimeLevels((prev) => ({ ...prev, [id]: ((prev[id] ?? 0) + 1) % 3 }))
   }
 
+  const loadStickers = useCallback(async () => {
+    setStickersLoading(true)
+    setStickerError('')
+    try {
+      const res = await api.stickers()
+      setStickers(res.items)
+      setStickerMax(res.maxCount)
+    } catch (err) {
+      setStickerError(err instanceof ApiError ? err.message : '读不到表情')
+    } finally {
+      setStickersLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (stickerOpen) void loadStickers()
+  }, [stickerOpen, loadStickers])
+
+  const pickSticker = async (sticker: StickerInfo) => {
+    if (sending) return
+    setSending(true)
+    try {
+      const res = await api.sendMessage({
+        clientId: crypto.randomUUID(),
+        kind: 'sticker',
+        stickerId: sticker.id,
+        replyTo: replyTo?.id ?? null,
+      })
+      append([res.message])
+      setReplyTo(null)
+      setStickerOpen(false)
+      stickRef.current = true
+      scrollToBottom()
+    } catch (err) {
+      flash(err instanceof ApiError ? err.message : '没发出去')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const uploadSticker = async (file: File) => {
+    setStickerError('')
+    try {
+      await api.uploadSticker(file)
+      await loadStickers()
+    } catch (err) {
+      setStickerError(err instanceof ApiError ? err.message : '传不上去')
+    }
+  }
+
+  const removeSticker = async (id: string) => {
+    setStickerError('')
+    try {
+      await api.deleteSticker(id)
+      await loadStickers()
+    } catch (err) {
+      setStickerError(err instanceof ApiError ? err.message : '删不掉')
+    }
+  }
+
   return (
     <div className="chat">
       <header className="chat-header">
@@ -316,6 +382,9 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
               timeLevel={timeLevels[message.id] ?? 0}
               onCycleTime={cycleTime}
               onQuote={setReplyTo}
+              onMediaLoad={() => {
+                if (stickRef.current) scrollToBottom()
+              }}
             />
           ))
         )}
@@ -352,7 +421,13 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
               }
             }}
           />
-          <button className="tool" type="button" disabled title="表情（P2）">
+          <button
+            className="tool"
+            type="button"
+            title="表情"
+            aria-label="表情"
+            onClick={() => setStickerOpen((v) => !v)}
+          >
             <SmileIcon />
           </button>
           <button className="tool" type="button" disabled title="更多（还没做）">
@@ -363,6 +438,19 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
           </button>
         </div>
       </footer>
+
+      {stickerOpen ? (
+        <StickerPanel
+          items={stickers}
+          maxCount={stickerMax}
+          loading={stickersLoading}
+          error={stickerError}
+          onPick={(sticker) => void pickSticker(sticker)}
+          onUpload={(file) => void uploadSticker(file)}
+          onDelete={(id) => void removeSticker(id)}
+          onClose={() => setStickerOpen(false)}
+        />
+      ) : null}
 
       {toast ? <div className="toast">{toast}</div> : null}
     </div>

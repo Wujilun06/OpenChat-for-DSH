@@ -33,11 +33,13 @@ Cookie 名 `oc_session`：HttpOnly、SameSite=Lax、https 下带 Secure、
 
 ```json
 { "clientId": "客户端生成的 uuid", "kind": "text", "text": "在吗", "replyTo": "被引用消息的 id" }
+{ "clientId": "客户端生成的 uuid", "kind": "sticker", "stickerId": "表情 id" }
 ```
 
 - `clientId` 必填。同一条重发会拿回原来那条，`created: false`，不会变两条。
-- `kind` 现在只认 `text`；`sticker`/`voice` 回了 `kind_not_ready`。
+- `kind` 认 `text` / `sticker`；别的回 `kind_not_ready`。
 - 文字去掉首尾空白后为空 → `400 empty_message`；超过 4000 字 → `400 too_long`。
+- 表情必须还在面板里（没删）→ 否则 `400 bad_sticker`。
 - `replyTo` 指向不存在的消息 → `400 bad_reply_to`。
 
 ### 合并窗口
@@ -45,15 +47,34 @@ Cookie 名 `oc_session`：HttpOnly、SameSite=Lax、https 下带 Secure、
 一条用户消息落库之后，服务端等 2 秒（`mock.mergeWindowMs`）再开始回：
 这 2 秒内连发的几句会算成一轮。假鱼正在回的时候你再发，排在下一轮。
 
-## 表情 / 通话（还没做）
+## 表情（P2 已实现）
+
+| 方法 | 路径 | 干什么 |
+|---|---|---|
+| GET | `/api/stickers` | 面板列表（只有没删的），带 `maxCount` |
+| POST | `/api/stickers` | multipart 上传，字段名 `file` |
+| DELETE | `/api/stickers/:id` | 软删 |
+| GET | `/api/stickers/:id/thumb` | 缩略图（gif 是首帧 png） |
+| GET | `/api/stickers/:id/file` | 原图（gif 会动） |
+
+规则：
+
+- 只收 jpg / png / webp / gif，单张 5 MB，共享池 100 个（数没删的）。
+- 按内容 sha256 去重：同一张再传一次直接给原来那条；软删过的会**复活**。
+- 软删只是从面板里拿掉，文件和记录都留着，历史消息照常显示。
+- 两个取图接口都带 `cache-control: public, max-age=31536000, immutable`，
+  所以客户端可以放心缓存（url 里带 id，内容不会变）。
+- 缩略图最长边 240px；gif 的首帧转成 png。
+
+错误码：`file_too_large`(413)、`bad_image`(400)、`unsupported_format`(400)、
+`sticker_limit`(409)、`sticker_required` / `bad_sticker`(400)、`sticker_not_found`(404)。
+
+发一条表情消息就是把 `kind` 换成 `sticker`、带上 `stickerId`（见上面「消息」）。
+
+## 通话（还没做）
 
 | 方法 | 路径 | 状态 |
 |---|---|---|
-| GET | `/api/stickers` | P2 |
-| POST | `/api/stickers` | P2 |
-| DELETE | `/api/stickers/:id` | P2 |
-| GET | `/api/stickers/:id/thumb` | P2 |
-| GET | `/api/stickers/:id/file` | P2 |
 | GET | `/api/calls/status` | P4 |
 | POST | `/api/calls` | P4，先回 501 |
 

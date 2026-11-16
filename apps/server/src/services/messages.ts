@@ -8,6 +8,7 @@ import type {
 } from '@openchat/shared'
 import { nextSeq } from '../db.js'
 import type { Hub } from './hub.js'
+import { getStickerInfo } from './stickers.js'
 
 export interface MessageRow {
   id: string
@@ -47,8 +48,7 @@ export function rowToMessage(db: DatabaseSync, row: MessageRow): MessageInfo {
     sender: row.sender as Sender,
     kind: row.kind as MessageKind,
     text: row.text,
-    // P2 才把表情接进来；这版一条带 sticker 的消息都没有。
-    sticker: null,
+    sticker: row.sticker_id ? getStickerInfo(db, row.sticker_id) : null,
     voiceMs: row.voice_ms === null ? null : Number(row.voice_ms),
     replyTo: reply,
     source: row.source as MessageSource,

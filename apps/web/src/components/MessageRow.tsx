@@ -8,6 +8,8 @@ export interface MessageRowProps {
   timeLevel: number
   onCycleTime: (id: string) => void
   onQuote: (message: MessageInfo) => void
+  /** 表情图加载完再贴一次底，不然图一出来就把上一条顶下去一点。 */
+  onMediaLoad: () => void
 }
 
 function nameOf(sender: Sender, peer: { name: string }): string {
@@ -20,8 +22,10 @@ export function MessageRow({
   timeLevel,
   onCycleTime,
   onQuote,
+  onMediaLoad,
 }: MessageRowProps) {
   const isMe = message.sender === 'me'
+  const sticker = message.kind === 'sticker' ? message.sticker : null
   // 0 不显示（默认），1 时分秒，2 年月日时分秒
   const timeText =
     timeLevel === 1 ? formatClock(message.createdAt) : timeLevel === 2 ? formatFull(message.createdAt) : ''
@@ -58,7 +62,7 @@ export function MessageRow({
         </div>
 
         <div
-          className="bubble"
+          className={`bubble${sticker ? ' sticker-bubble' : ''}`}
           role="button"
           tabIndex={0}
           title="点一下引用这条"
@@ -73,7 +77,18 @@ export function MessageRow({
               <span className="quote-text">{message.replyTo.text ?? '[表情]'}</span>
             </div>
           ) : null}
-          <div className="bubble-text">{message.text}</div>
+          {sticker ? (
+            <img
+              className="sticker-img"
+              src={sticker.fileUrl}
+              width={sticker.w}
+              height={sticker.h}
+              alt="表情"
+              onLoad={onMediaLoad}
+            />
+          ) : (
+            <div className="bubble-text">{message.text}</div>
+          )}
         </div>
       </div>
 

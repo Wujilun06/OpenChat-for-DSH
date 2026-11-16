@@ -4,6 +4,8 @@ import type {
   MeResult,
   MessageInfo,
   MessagesResult,
+  StickerInfo,
+  StickersResult,
 } from '@openchat/shared'
 
 export class ApiError extends Error {
@@ -20,7 +22,8 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
-  if (init.body !== undefined && !headers.has('content-type')) {
+  const isForm = init.body instanceof FormData
+  if (init.body !== undefined && !isForm && !headers.has('content-type')) {
     headers.set('content-type', 'application/json')
   }
 
@@ -67,8 +70,9 @@ function messageQuery(params: ListMessagesParams): string {
 
 export interface SendMessageInput {
   clientId: string
-  kind: 'text'
-  text: string
+  kind: 'text' | 'sticker'
+  text?: string
+  stickerId?: string
   replyTo?: string | null
 }
 
@@ -96,4 +100,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ on }),
     }),
+
+  stickers: () => request<StickersResult>('/api/stickers'),
+
+  uploadSticker: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<{ ok: true; sticker: StickerInfo }>('/api/stickers', {
+      method: 'POST',
+      body: form,
+    })
+  },
+
+  deleteSticker: (id: string) =>
+    request<{ ok: true }>(`/api/stickers/${id}`, { method: 'DELETE' }),
 }
