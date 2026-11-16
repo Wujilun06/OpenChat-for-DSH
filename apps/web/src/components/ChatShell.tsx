@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AttachmentInfo, MeResult, MessageInfo, StickerInfo } from '@openchat/shared'
 import { ApiError, api } from '../api'
 import { MessageRow } from './MessageRow'
+import { PendingVoiceRow } from './PendingVoiceRow'
 import { StickerPanel } from './StickerPanel'
 import { PlusMenu } from './PlusMenu'
 import { MediaViewer } from './MediaViewer'
@@ -31,6 +32,7 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
   const [recording, setRecording] = useState(false)
   const [recordMs, setRecordMs] = useState(0)
   const [asrReady, setAsrReady] = useState<boolean | null>(null)
+  const [pendingVoice, setPendingVoice] = useState<{ voiceMs: number } | null>(null)
 
   const lastSeqRef = useRef(me.conversation.lastSeq)
   const stickRef = useRef(true)
@@ -156,7 +158,12 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
           void catchUp(hello.lastSeq)
         }
       })
-      listen('message.created', (data) => append([data as MessageInfo]))
+      listen('message.created', (data) => {
+        const message = data as MessageInfo
+        // 真消息到了，占位那条就撤掉（SSE 有时比 HTTP 响应先到）
+        if (message.sender === 'me' && message.kind === 'voice') setPendingVoice(null)
+        append([message])
+      })
       listen('message.updated', (data) => {
         const change = data as { id: string; changes: Partial<MessageInfo> }
         setMessages((prev) => prev.map((m) => (m.id === change.id ? { ...m, ...change.changes } : m)))
@@ -193,6 +200,13 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
   useEffect(() => {
     if (stickRef.current) scrollToBottom()
   }, [messages.length, scrollToBottom])
+
+  // 转写占位一出现也贴着底
+  useEffect(() => {
+    if (!pendingVoice) return
+    stickRef.current = true
+    scrollToBottom()
+  }, [pendingVoice, scrollToBottom])
 
   // 输入框跟着长
   useEffect(() => {
@@ -429,10 +443,10 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
     }
   }
 
-  const uploadVoice = async (blob: Blob) => {
+  const uploadVoice = async (blob: Blob, durationMs: number) => {
     if (sending) return
     setSending(true)
-    flash('转写中…')
+    setPendingVoice({ voiceMs: durationMs })
     try {
       const res = await api.sendVoice(blob, {
         clientId: crypto.randomUUID(),
@@ -442,10 +456,10 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
       setReplyTo(null)
       stickRef.current = true
       scrollToBottom()
-      clearToast()
     } catch (err) {
       flash(err instanceof ApiError ? err.message : '转写失败')
     } finally {
+      setPendingVoice(null)
       setSending(false)
     }
   }
@@ -487,6 +501,7 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
       recorder.onstop = () => {
         const type = recorder.mimeType || mime || 'audio/webm'
         const blob = new Blob(chunksRef.current, { type })
+        const durationMs = Math.max(0, Date.now() - recordStartRef.current)
         chunksRef.current = []
         stream.getTracks().forEach((track) => track.stop())
         streamRef.current = null
@@ -498,7 +513,7 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
           flash('太短了，多说两句')
           return
         }
-        void uploadVoice(blob)
+        void uploadVoice(blob, durationMs)
       }
 
       recorder.start()
@@ -580,6 +595,8 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
             />
           ))
         )}
+
+        {pendingVoice ? <PendingVoiceRow voiceMs={pendingVoice.voiceMs} /> : null}
       </main>
 
       <footer className="composer">
