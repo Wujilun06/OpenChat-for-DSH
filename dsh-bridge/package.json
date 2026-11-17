@@ -1,6 +1,6 @@
 {
   "name": "dsh-openchat-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Thin bridge that lets the OpenChat web app read/send messages in a DSH session.",
