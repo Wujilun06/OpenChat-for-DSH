@@ -169,7 +169,13 @@ export function apply(ctx) {
     } catch {
       return null
     }
-    return findAgent(sessionId)
+    // create 之后 agent 不一定是同一个 tick 就出现，给它一点时间
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const agent = findAgent(sessionId)
+      if (agent) return agent
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    return null
   }
 
   function snapshotEvents(id) {
@@ -242,20 +248,6 @@ export function apply(ctx) {
       error.code = 'no_session'
       throw error
     }
-    await ensureSession(sessionId)
-
-    let controller = null
-    try {
-      controller = ctx.get?.('sessionController')
-    } catch {
-      controller = null
-    }
-    if (!controller || typeof controller.prompt !== 'function') {
-      const error = new Error('宿主没有 sessionController')
-      error.status = 500
-      error.code = 'no_controller'
-      throw error
-    }
 
     const text = String(payload.text || '').trim()
     const files = Array.isArray(payload.files) ? payload.files.slice(0, 10) : []
@@ -311,14 +303,22 @@ export function apply(ctx) {
       ]
     }
 
-    try {
-      // mode: queue —— 她正在忙的时候排队，不打断
-      await controller.prompt({ sessionId, content: finalContent, mode: 'queue' })
-    } catch (first) {
-      if (typeof controller.create !== 'function') throw first
-      await controller.create({ sessionId, ...(defaultCwd ? { cwd: defaultCwd } : {}) })
-      await controller.prompt({ sessionId, content: finalContent, mode: 'queue' })
+    // 用 qq-bridge 验证过的那条路：活着的 agent.followup。
+    // sessionController.prompt 需要额外的 signal 参数，少给就炸（踩过了）。
+    const agent = await ensureSession(sessionId)
+    if (!agent || typeof agent.followup !== 'function') {
+      const error = new Error('会话没打开（先在 DSH 里打开它，或检查配置里的 cwd）')
+      error.status = 409
+      error.code = 'session_not_open'
+      throw error
     }
+
+    await agent.followup({
+      id: randomUUID(),
+      role: 'user',
+      content: finalContent,
+      source: { kind: 'openchat' },
+    })
     return true
   }
 
@@ -382,7 +382,7 @@ export function apply(ctx) {
       if (req.method === 'GET' && url.pathname === '/health') {
         return sendJson(res, 200, {
           ok: true,
-          version: '0.1.0',
+          version: '0.2.0',
           session: defaultSession,
           sessions: listSessions(),
         })
