@@ -258,7 +258,7 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
   if (!convId) throw new Error('数据库里没有会话，seed 没跑成功')
 
   const hub = new Hub()
-  const dsh = deps.dsh ?? (config.dsh.enabled ? createDshBridge({ config, db, hub, convId }) : null)
+  const dsh = deps.dsh ?? (config.dsh.enabled ? createDshBridge({ config, paths, db, hub, convId }) : null)
   const mock = new MockFish({
     db,
     hub,
@@ -370,8 +370,15 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
     })
 
     if (created) {
-      if (dsh) dsh.queue(text ?? '')
-      else mock.note(kind === 'text' ? (text ?? '') : `[${kind}]`)
+      if (dsh) {
+        if (kind === 'text') dsh.queue(text ?? '')
+        else if (kind === 'sticker' && stickerId) dsh.sendMedia({ kind: 'sticker', stickerId })
+        else if (attachmentId) {
+          dsh.sendMedia({ kind: kind as 'image' | 'video' | 'file', attachmentId })
+        }
+      } else {
+        mock.note(kind === 'text' ? (text ?? '') : `[${kind}]`)
+      }
     }
     return { ok: true, message, created }
   })

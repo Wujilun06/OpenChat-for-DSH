@@ -60,7 +60,10 @@ dsh plugin --profile desktop add "file:D:\DSH\OpenChat\dsh-bridge"
 
 - 只同步**助手说的话**（以及导入的历史）。你在 DSH 窗口里亲手打的字不会实时出现在网页里，
   下次启动导历史时才进来——避免和网页自己发的那条重复。
-- 图片、表情、文件消息不往 DSH 送（DSH 那边目前只吃文字）；语音消息送的是转写文字。
+- **图片/表情**会送进 DSH：以 base64 交给宿主的 `attachments.admitPromptContent` 转成附件，
+  再进提示词（跟 qq-bridge 一个路子）；单张超过 5MB 就改给本地路径。
+- **视频/文件**作为一条带本地路径的文字送进去（DSH 能读文件，但不会“看”视频）。
+- 语音消息送的是转写文字。
 - 会话必须在 DSH 里能开：桥会先试 `agents.get`，再 `sessionController.create`；
   两边都失败就回 `session_not_open`。
 - 桥只监听 `127.0.0.1`，外面连不到；要暴露请自己加反代。

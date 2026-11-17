@@ -234,7 +234,7 @@ export function apply(ctx) {
     return items.slice(-count)
   }
 
-  async function send(id, text) {
+  async function send(id, payload = {}) {
     const sessionId = String(id || defaultSession || '').trim()
     if (!sessionId) {
       const error = new Error('没配置会话（~/.dsh/openchat-bridge.json 的 session）')
@@ -257,14 +257,67 @@ export function apply(ctx) {
       throw error
     }
 
-    const content = [{ type: 'text', text }]
+    const text = String(payload.text || '').trim()
+    const files = Array.isArray(payload.files) ? payload.files.slice(0, 10) : []
+    const images = Array.isArray(payload.images) ? payload.images.slice(0, 10) : []
+
+    const content = []
+    if (text) content.push({ type: 'text', text })
+    if (files.length) {
+      content.push({
+        type: 'text',
+        text: files
+          .map((file) => `[文件] ${String(file.name || '文件')}（本地路径：${String(file.path || '')}）`)
+          .join('\n'),
+      })
+    }
+    for (const image of images) {
+      const data = String(image.data || '')
+      if (!data) continue
+      content.push({
+        type: 'image',
+        data,
+        mediaType: String(image.mediaType || 'image/png'),
+        name: String(image.name || 'image'),
+      })
+    }
+    if (!content.length) {
+      const error = new Error('空消息')
+      error.status = 400
+      error.code = 'empty'
+      throw error
+    }
+
+    let finalContent = content
+    try {
+      // 跟 qq-bridge 一样：图片先交给宿主把它转成附件，再进提示词
+      const attachments = ctx.get?.('attachments')
+      if (attachments && typeof attachments.admitPromptContent === 'function') {
+        finalContent = await attachments.admitPromptContent(content)
+      }
+    } catch (error) {
+      console.error('[openchat-bridge] 图片交给 DSH 失败，退回纯文字：' + String((error && error.message) || error))
+      finalContent = [
+        {
+          type: 'text',
+          text: [
+            text,
+            ...files.map((file) => `[文件] ${String(file.name || '文件')}（本地路径：${String(file.path || '')}）`),
+            ...images.map((image) => `[图片] ${String(image.name || 'image')}（本地路径：${String(image.path || '未知')}）`),
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        },
+      ]
+    }
+
     try {
       // mode: queue —— 她正在忙的时候排队，不打断
-      await controller.prompt({ sessionId, content, mode: 'queue' })
+      await controller.prompt({ sessionId, content: finalContent, mode: 'queue' })
     } catch (first) {
       if (typeof controller.create !== 'function') throw first
       await controller.create({ sessionId, ...(defaultCwd ? { cwd: defaultCwd } : {}) })
-      await controller.prompt({ sessionId, content, mode: 'queue' })
+      await controller.prompt({ sessionId, content: finalContent, mode: 'queue' })
     }
     return true
   }
@@ -295,7 +348,8 @@ export function apply(ctx) {
       let body = ''
       req.on('data', (chunk) => {
         body += chunk
-        if (body.length > 1_000_000) req.destroy()
+        // 图片是 base64 进来的，留到 40MB
+        if (body.length > 40 * 1024 * 1024) req.destroy()
       })
       req.on('end', () => {
         try {
@@ -349,9 +403,7 @@ export function apply(ctx) {
 
       if (req.method === 'POST' && url.pathname === '/send') {
         const body = await readBody(req)
-        const text = String(body.text || '').trim()
-        if (!text) return sendJson(res, 400, { ok: false, code: 'empty', message: '空消息' })
-        await send(String(body.session || ''), text)
+        await send(String(body.session || ''), body)
         return sendJson(res, 200, { ok: true })
       }
 

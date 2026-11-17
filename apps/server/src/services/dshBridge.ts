@@ -1,10 +1,12 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
-import type { AppConfig } from '../config.js'
+import type { AppConfig, AppPaths } from '../config.js'
 import type { Hub } from './hub.js'
 import { createMessage } from './messages.js'
+import { getAttachmentRow } from './attachments.js'
+import { getStickerRow } from './stickers.js'
 
 /**
  * 接 DSH 的那半边。
@@ -26,7 +28,16 @@ export interface DshBridge {
   stop(): void
   /** 用户发了一条文字：进合并窗口，窗口结束再一起送过去。 */
   queue(text: string): void
+  /** 表情 / 图片 / 视频 / 文件：不参与合并，直接送。 */
+  sendMedia(input: {
+    kind: 'sticker' | 'image' | 'video' | 'file'
+    stickerId?: string | null
+    attachmentId?: string | null
+  }): void
 }
+
+/** 图片 base64 超过这个大小就改成给路径，别把请求撑爆。 */
+const MAX_INLINE_IMAGE_BYTES = 5 * 1024 * 1024
 
 interface HistoryItem {
   id?: string
@@ -51,11 +62,12 @@ function readBridgeFile(): BridgeFile {
 
 export function createDshBridge(deps: {
   config: AppConfig
+  paths: AppPaths
   db: DatabaseSync
   hub: Hub
   convId: string
 }): DshBridge {
-  const { config, db, hub, convId } = deps
+  const { config, paths, db, hub, convId } = deps
   const settings = config.dsh
 
   let stopped = false
@@ -223,7 +235,29 @@ export function createDshBridge(deps: {
     }
   }
 
-  async function flush(): Promise<void> {
+  let chain: Promise<void> = Promise.resolve()
+
+  function enqueue(task: () => Promise<void>): void {
+    chain = chain.then(task).catch((error) => {
+      console.error('[dsh] 发送任务失败：', (error as Error).message)
+    })
+  }
+
+  function pushSystem(text: string): void {
+    try {
+      createMessage(db, hub, {
+        convId,
+        sender: 'fish',
+        kind: 'system',
+        text,
+        source: 'dsh',
+      })
+    } catch {
+      // 连错误消息都写不进去就算了
+    }
+  }
+
+  async function flushText(): Promise<void> {
     const text = pending.join('\n').trim()
     pending = []
     if (!text) return
@@ -241,17 +275,77 @@ export function createDshBridge(deps: {
       )
     } catch (error) {
       hub.publish({ type: 'typing.changed', data: { who: 'fish', on: false } })
+      pushSystem(`（没送到 DSH：${(error as Error).message}）`)
+    }
+  }
+
+  async function sendMediaNow(input: {
+    kind: 'sticker' | 'image' | 'video' | 'file'
+    stickerId?: string | null
+    attachmentId?: string | null
+  }): Promise<void> {
+    const images: Array<{ data: string; mediaType: string; name: string; path: string }> = []
+    const files: Array<{ path: string; name: string }> = []
+    let text = ''
+
+    const addImage = (file: string, mediaType: string, name: string) => {
       try {
-        createMessage(db, hub, {
-          convId,
-          sender: 'fish',
-          kind: 'system',
-          text: `（没送到 DSH：${(error as Error).message}）`,
-          source: 'dsh',
-        })
+        const size = statSync(file).size
+        if (size <= MAX_INLINE_IMAGE_BYTES) {
+          images.push({
+            data: readFileSync(file).toString('base64'),
+            mediaType,
+            name,
+            path: file,
+          })
+        } else {
+          files.push({ path: file, name })
+        }
       } catch {
-        // 连错误消息都写不进去就算了
+        files.push({ path: file, name })
       }
+    }
+
+    if (input.kind === 'sticker' && input.stickerId) {
+      const row = getStickerRow(db, input.stickerId)
+      if (!row) return
+      const file = join(paths.dataDir, row.file_rel)
+      if (!existsSync(file)) return
+      text = '[表情]'
+      addImage(file, row.mime, '表情')
+    } else if (input.attachmentId) {
+      const row = getAttachmentRow(db, input.attachmentId)
+      if (!row) return
+      const file = join(paths.dataDir, row.file_rel)
+      if (!existsSync(file)) return
+
+      if (row.kind === 'image') {
+        addImage(file, row.mime, row.name)
+      } else if (row.kind === 'video') {
+        text = `[视频] ${row.name}`
+        files.push({ path: file, name: row.name })
+      } else {
+        text = `[文件] ${row.name}`
+        files.push({ path: file, name: row.name })
+      }
+    }
+
+    if (!images.length && !files.length && !text) return
+
+    hub.publish({ type: 'typing.changed', data: { who: 'fish', on: true } })
+    try {
+      await call(
+        '/send',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text, images, files }),
+        },
+        60_000,
+      )
+    } catch (error) {
+      hub.publish({ type: 'typing.changed', data: { who: 'fish', on: false } })
+      pushSystem(`（没送到 DSH：${(error as Error).message}）`)
     }
   }
 
@@ -263,8 +357,25 @@ export function createDshBridge(deps: {
     if (mergeTimer) clearTimeout(mergeTimer)
     mergeTimer = setTimeout(() => {
       mergeTimer = null
-      void flush()
+      enqueue(flushText)
     }, settings.mergeWindowMs)
+  }
+
+  function sendMedia(input: {
+    kind: 'sticker' | 'image' | 'video' | 'file'
+    stickerId?: string | null
+    attachmentId?: string | null
+  }): void {
+    if (!settings.enabled) return
+    // 有攒着的文字就先发出去，保持顺序
+    if (mergeTimer) {
+      clearTimeout(mergeTimer)
+      mergeTimer = null
+    }
+    enqueue(async () => {
+      await flushText()
+      await sendMediaNow(input)
+    })
   }
 
   function start(): void {
@@ -285,5 +396,5 @@ export function createDshBridge(deps: {
     }
   }
 
-  return { enabled: settings.enabled, start, stop, queue }
+  return { enabled: settings.enabled, start, stop, queue, sendMedia }
 }

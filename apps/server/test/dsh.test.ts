@@ -17,6 +17,7 @@ let bridge: Server
 let streamRes: ServerResponse | null = null
 let token = ''
 const sent: string[] = []
+const sentBodies: Array<Record<string, unknown>> = []
 
 const config: AppConfig = {
   server: { host: '127.0.0.1', port: 0, publicUrl: '' },
@@ -91,11 +92,14 @@ before(async () => {
         body += chunk
       })
       req.on('end', () => {
+        let parsed: Record<string, unknown> = {}
         try {
-          sent.push(String(JSON.parse(body).text || ''))
+          parsed = JSON.parse(body)
         } catch {
-          sent.push('')
+          parsed = {}
         }
+        sent.push(String(parsed.text || ''))
+        sentBodies.push(parsed)
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ ok: true }))
       })
@@ -193,4 +197,77 @@ test('开着 DSH 时假鱼不再插话', async () => {
   await sleep(400)
   const items = await list()
   assert.equal(items.some((row) => row.text && row.text.includes('占位回答')), false)
+})
+
+function multipart(file: Buffer, filename: string, type: string) {
+  const boundary = '----openchat-dsh-boundary'
+  const head = Buffer.from(
+    `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+      `Content-Type: ${type}\r\n\r\n`,
+  )
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`)
+  return {
+    payload: Buffer.concat([head, file, tail]),
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+  }
+}
+
+const PNG_1X1 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+)
+
+test('图片消息会带着 base64 送进 DSH', async () => {
+  const form = multipart(PNG_1X1, 'dot.png', 'image/png')
+  const uploaded = await app.inject({
+    method: 'POST',
+    url: '/api/attachments',
+    headers: { ...form.headers, ...auth() },
+    payload: form.payload,
+  })
+  assert.equal(uploaded.statusCode, 200, uploaded.body)
+  const attachmentId = uploaded.json().attachment.id
+
+  const posted = await app.inject({
+    method: 'POST',
+    url: '/api/messages',
+    headers: auth(),
+    payload: { clientId: 'img-1', kind: 'image', attachmentId },
+  })
+  assert.equal(posted.statusCode, 200, posted.body)
+
+  const body = await waitFor(async () => {
+    const hit = sentBodies.find((entry) => Array.isArray(entry.images) && entry.images.length > 0)
+    return hit || null
+  }, 4000)
+  const images = body.images as Array<{ data?: string; mediaType?: string }>
+  assert.equal(images.length, 1)
+  assert.ok((images[0]!.data || '').length > 10)
+})
+
+test('文件消息会把本地路径告诉 DSH', async () => {
+  const form = multipart(Buffer.from('hello file'), 'notes.txt', 'text/plain')
+  const uploaded = await app.inject({
+    method: 'POST',
+    url: '/api/attachments',
+    headers: { ...form.headers, ...auth() },
+    payload: form.payload,
+  })
+  const attachmentId = uploaded.json().attachment.id
+
+  const posted = await app.inject({
+    method: 'POST',
+    url: '/api/messages',
+    headers: auth(),
+    payload: { clientId: 'file-1', kind: 'file', attachmentId },
+  })
+  assert.equal(posted.statusCode, 200, posted.body)
+
+  const body = await waitFor(async () => {
+    const hit = sentBodies.find((entry) => Array.isArray(entry.files) && entry.files.length > 0)
+    return hit || null
+  }, 4000)
+  const files = body.files as Array<{ path?: string }>
+  assert.match(String(files[0]!.path || ''), /\.txt$/)
 })
