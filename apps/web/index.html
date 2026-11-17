@@ -9,7 +9,12 @@
     <meta name="theme-color" content="#ededed" />
     <meta name="color-scheme" content="light" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!--
+      别加 apple-mobile-web-app-status-bar-style。
+      iOS 26 会把状态栏那一块做成液态玻璃，网页像素钻到那条下面就会被抹开，
+      而且没有 CSS 能关掉；不写这条，web view 从状态栏下面开始，env(safe-area-inset-top) 是 0。
+    -->
     <meta name="apple-mobile-web-app-title" content="OpenChat" />
     <meta name="format-detection" content="telephone=no" />
     <link rel="manifest" href="/manifest.webmanifest" />
