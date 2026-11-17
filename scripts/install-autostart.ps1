@@ -38,7 +38,8 @@ $inner = "Set-Location -LiteralPath '$Repo'; & '$node' '$entry' *>> '$log'"
 $argument = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "' + $inner + '"'
 
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$user = "$env:USERDOMAIN\$env:USERNAME"
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
 $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries `
   -DontStopIfGoingOnBatteries `
@@ -47,7 +48,7 @@ $settings = New-ScheduledTaskSettingsSet `
   -RestartInterval (New-TimeSpan -Minutes 1) `
   -ExecutionTimeLimit ([TimeSpan]::Zero)
 $principal = New-ScheduledTaskPrincipal `
-  -UserId "$env:USERDOMAIN\$env:USERNAME" `
+  -UserId $user `
   -LogonType Interactive `
   -RunLevel Limited
 

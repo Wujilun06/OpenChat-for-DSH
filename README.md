@@ -73,5 +73,7 @@ scripts/         图标生成、开机自启
 
 ## 里程碑
 
-P0 骨架 ✅ → P1 文字聊天 ✅ → P2 表情 ✅ → P2.5 附件与交互 ✅ → P3 语音（转写，不存音频）✅ → P4 通话占位 ✅ → P5 接 DSH。
+P0 骨架 ✅ → P1 文字聊天 ✅ → P2 表情 ✅ → P2.5 附件与交互 ✅ → P3 语音（转写，不存音频）✅ → P4 通话占位 ✅ → P4.5 上线（Funnel + 自启）✅ → P5 接 DSH。
+
+上线步骤见 [docs/deploy.md](docs/deploy.md)（Tailscale Funnel、开机自启、手机添加到主屏幕）。
 细节和验收标准在 [docs/milestones.md](docs/milestones.md)。

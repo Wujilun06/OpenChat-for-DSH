@@ -81,6 +81,18 @@
 - `GET /api/calls/status` 明确回 `supported: false`
 - 文档里这个占位接口的字段和以后怎么接都写清楚了
 
+## P4.5 上线（done）
+
+Tailscale Funnel 把本机 8787 暴露成 `https://<机器名>.<tailnet>.ts.net/`，手机能在外网打开、
+能添加到主屏幕；开机自启；部署步骤写在 [deploy.md](deploy.md)。
+
+**验收**
+- 外网 https 打开能到登录页，登录后 cookie 带 Secure
+- 弱密码已换掉，旧密码 401
+- `manifest.webmanifest` 正常返回，手机「添加到主屏幕」后没有地址栏
+- 重启电脑（重新登录）后服务自己起来
+- 不是公网 IP，是隧道；关掉：`tailscale funnel --https=443 off`
+
 ## P5 接 DSH
 
 先读 DSH 会话历史初始化（含以前 QQ 聊的），之后单独建库；收发走

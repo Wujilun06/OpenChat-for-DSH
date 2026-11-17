@@ -15,6 +15,7 @@
 - 本机没有公网 IPv4 / IPv6（实测：只有 `fc01::/64` 私有地址，IPv4 是 `10.150.235.x`），
   所以走隧道。
 - 路线：**Tailscale Funnel**（https、免装 App），私网模式留成配置开关。
+  实际地址在 `tailscale funnel status` 里看，不写进仓库。
 - 手机：iPhone Safari，添加到主屏幕当 App 用。PWA 要求 https。
 - 登录：一个账号 + 密码；密码写在 `config.json`。
 - 电脑要开机自启；以后可能有定时开关机脚本。
