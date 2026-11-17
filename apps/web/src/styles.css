@@ -370,21 +370,21 @@ button {
 
 /*
  * 装成网页 App（standalone）后没有 Safari 工具栏挡着，web view 顶到屏幕最上面，
- * iOS 26 的状态栏玻璃直接盖在网页上。实测只压住标题下半行左右，
- * 所以只往下挪 10px 就够，不留大块空白。
+ * iOS 26 的状态栏玻璃直接盖在网页上，往下糊进页面一段。
+ * 这里只在 standalone 下把标题再往下压 24px：既能躲开玻璃，又不像之前 60px 那样空一大块。
  */
 @media (display-mode: standalone) {
   .chat-header {
     padding-top: env(safe-area-inset-top);
-    min-height: calc(58px + env(safe-area-inset-top));
+    min-height: calc(72px + env(safe-area-inset-top));
   }
 
   .chat-title {
-    top: calc(env(safe-area-inset-top) + 34px);
+    top: calc(env(safe-area-inset-top) + 48px);
   }
 
   .chat-menu {
-    top: calc(env(safe-area-inset-top) + 58px);
+    top: calc(env(safe-area-inset-top) + 72px);
   }
 }
 
