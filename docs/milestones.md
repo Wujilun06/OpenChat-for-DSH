@@ -93,10 +93,16 @@ Tailscale Funnel 把本机 8787 暴露成 `https://<机器名>.<tailnet>.ts.net/
 - 重启电脑（重新登录）后服务自己起来
 - 不是公网 IP，是隧道；关掉：`tailscale funnel --https=443 off`
 
-## P5 接 DSH（代码完成，等重启 DSH 后做最后实测）
+## P5 接 DSH（已实测通过；目前按计划断开）
 
-先读会话历史初始化（含以前 QQ 聊的），之后单独建库；收发走 `sessionController.prompt` +
+先读会话历史初始化（含以前 QQ 聊的），之后单独建库；收发走 `agent.followup` +
 `session/event`；开着 DSH 时假鱼自动关掉。细节见 [dsh.md](dsh.md)。
+
+**实测（2026-11-17）**
+- 历史导入 200 条 ✅
+- 网页发文字 → bili-whale 回话出现在网页（「在，看到了。」）✅
+- 网页发图片 → 鱼看懂并描述（「红底中间一个米白方块」）✅
+- 按计划断开：`dsh.enabled=false`、`mock.enabled=false`，OpenChat 健康检查 `dsh=off`
 
 **验收**
 - 启动后网页里能看到那间会话最近的历史（按消息 id 去重，不会重复导）
@@ -105,4 +111,5 @@ Tailscale Funnel 把本机 8787 暴露成 `https://<机器名>.<tailnet>.ts.net/
 - 桥断开时网页照常用，发不出去会有一条系统提示
 - 停掉 QQ 桥以后网页照常收发（QQ 什么时候停由人决定）
 
-> 宿主侧插件不热加载：装完/改完要重启一次 DSH。重启前这条算「代码完成、待实测」。
+> 宿主侧插件不热加载：装完/改完要重启一次 DSH；profile 里装的是包的一份拷贝，
+> 改完源码还要 `dsh plugin add` 重装一次。

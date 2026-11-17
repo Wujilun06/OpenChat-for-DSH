@@ -56,6 +56,15 @@ dsh plugin --profile desktop add "file:D:\DSH\OpenChat\dsh-bridge"
 装完**重启一次 DSH**（宿主侧插件不会热加载）。重启后 `http://127.0.0.1:8788/health`
 应该能返回 `{"ok":true,...}`。
 
+## 临时断开 / 重新接上
+
+现在 QQ 还在用，OpenChat 只是验证过就断开：
+
+- 断开：`config.json` 里 `dsh.enabled` 改 `false`（`mock.enabled` 也关掉，不然假鱼会插话），重启 OpenChat。
+  桥和插件还留在 DSH 里，只是没人用了。
+- 重新接：`dsh.enabled` 改回 `true`，重启 OpenChat；**先把目标会话在 DSH 里点开**（没开的会话桥塞不进去，会回 `session_not_open`）。
+- 桥的配置在 `~/.dsh/openchat-bridge.json`，改完要重启 DSH 才读。
+
 ## 已知边界
 
 - 只同步**助手说的话**（以及导入的历史）。你在 DSH 窗口里亲手打的字不会实时出现在网页里，
