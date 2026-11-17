@@ -134,9 +134,16 @@ export function apply(ctx) {
   }
 
   function findAgent(id) {
+    let agents = null
+    try {
+      agents = ctx.get?.('agents')
+    } catch {
+      agents = null
+    }
+    if (!agents || typeof agents.get !== 'function') return null
     for (const candidate of candidateIds(id)) {
       try {
-        const agent = ctx.agents?.get?.(candidate)
+        const agent = agents.get(candidate)
         if (agent) return agent
       } catch {
         // 继续试下一个
@@ -152,7 +159,7 @@ export function apply(ctx) {
     const live = findAgent(sessionId)
     if (live) return live
     try {
-      const controller = ctx.sessionController
+      const controller = ctx.get?.('sessionController')
       if (controller && typeof controller.create === 'function') {
         await controller.create({
           sessionId,
@@ -169,7 +176,7 @@ export function apply(ctx) {
     const sessionId = String(id || defaultSession || '')
     for (const candidate of candidateIds(sessionId)) {
       try {
-        const session = ctx.get?.('sessions')?.get?.(candidate) || ctx.sessions?.get?.(candidate)
+        const session = ctx.get?.('sessions')?.get?.(candidate)
         if (session && typeof session.snapshotEvents === 'function') {
           const events = session.snapshotEvents()
           if (Array.isArray(events)) return events
@@ -237,7 +244,12 @@ export function apply(ctx) {
     }
     await ensureSession(sessionId)
 
-    const controller = ctx.sessionController
+    let controller = null
+    try {
+      controller = ctx.get?.('sessionController')
+    } catch {
+      controller = null
+    }
     if (!controller || typeof controller.prompt !== 'function') {
       const error = new Error('宿主没有 sessionController')
       error.status = 500
