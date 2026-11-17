@@ -368,27 +368,6 @@ button {
   white-space: nowrap;
 }
 
-/*
- * 装成网页 App（standalone）后没有 Safari 工具栏挡着，web view 会顶到屏幕最上面，
- * iOS 26 的状态栏那层液态玻璃就盖在网页上，把顶栏文字糊掉。
- * 这里在 standalone 下额外留一条实心顶边，把内容压到玻璃下面；
- * env() 在 iOS 26 的 standalone 里可能是 0，所以给它一个 60px 的下限。
- */
-@media (display-mode: standalone) {
-  .chat-header {
-    padding-top: max(env(safe-area-inset-top), 60px);
-    min-height: calc(48px + max(env(safe-area-inset-top), 60px));
-  }
-
-  .chat-title {
-    top: calc(max(env(safe-area-inset-top), 60px) + 24px);
-  }
-
-  .chat-menu {
-    top: calc(max(env(safe-area-inset-top), 60px) + 48px);
-  }
-}
-
 .empty {
   display: flex;
   flex: 1;
