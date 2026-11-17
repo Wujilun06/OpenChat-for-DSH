@@ -532,6 +532,48 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
     return reply.header('content-length', String(size)).send(openAttachment(file))
   })
 
+  // ── 通话（P4 占位：接口和状态留好，不做实时）──────────────────────
+  app.get('/api/calls/status', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+    return { ok: true, supported: false, active: null }
+  })
+
+  app.post('/api/calls', async (req, reply) => {
+    const session = requireSession(req, reply)
+    if (!session) return reply
+
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const kind = String(body.kind ?? 'audio')
+    if (kind !== 'audio' && kind !== 'video') {
+      return fail(reply, 400, 'bad_call_kind', '只认 audio / video')
+    }
+
+    const now = Date.now()
+    const id = crypto.randomUUID()
+    db.prepare(
+      `INSERT INTO calls (id, kind, direction, state, created_at, ended_at)
+       VALUES (?, ?, 'outgoing', 'unsupported', ?, NULL)`,
+    ).run(id, kind, now)
+
+    const call = {
+      id,
+      kind: kind as 'audio' | 'video',
+      direction: 'outgoing' as const,
+      state: 'unsupported' as const,
+      createdAt: now,
+      endedAt: null,
+    }
+    hub.publish({ type: 'call.state', data: call })
+
+    return reply.code(501).send({
+      ok: false,
+      code: 'call_not_implemented',
+      message: '通话还没做（P4 占位：接口和事件已经留好）',
+      call,
+    })
+  })
+
   // ── 语音消息：上传录音 → 转写 → 只存文字和时长 ──────────────────
   app.post('/api/messages/voice', async (req, reply) => {
     const session = requireSession(req, reply)

@@ -822,6 +822,43 @@ button {
   font-size: 11px;
 }
 
+/* ---------- 通话占位 ---------- */
+.call-sheet {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+.call-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 10px 4px 2px;
+}
+
+.call-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 0;
+  background: none;
+}
+
+.call-icon {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  background: #fff;
+  color: #333;
+}
+
+.call-label {
+  color: #555;
+  font-size: 13px;
+}
+
 /* ---------- 看原图 ---------- */
 .viewer {
   position: fixed;

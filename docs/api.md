@@ -107,12 +107,18 @@ Cookie 名 `oc_session`：HttpOnly、SameSite=Lax、https 下带 Secure、
 错误码：`file_too_large`(413)、`bad_image`(400)、`unsupported_image`(400)、
 `attachment_not_found`(404)、`file_missing`(404)、`thumb_missing`(404)。
 
-## 通话（还没做）
+## 通话（P4 占位）
 
-| 方法 | 路径 | 状态 |
+| 方法 | 路径 | 干什么 |
 |---|---|---|
-| GET | `/api/calls/status` | P4 |
-| POST | `/api/calls` | P4，先回 501 |
+| GET | `/api/calls/status` | `{ok:true, supported:false, active:null}` |
+| POST | `/api/calls` | body `{kind:'audio'|'video'}`；落一条 calls 记录、广播 `call.state`、回 501 |
+
+- 现在**不会接通**：返回 `501` + `call_not_implemented`，body 里带 `call`
+  （`state: 'unsupported'`、`direction: 'outgoing'`）。
+- 同时通过 SSE 发一条 `call.state`，替以后的信令留好通道。
+- 以后接 WebRTC 时：`POST` 变成「发起邀请」，再加 `PUT /api/calls/:id` 处理接听/挂断/拒绝，
+  状态继续走 `call.state`。`kind` 不认识的会被 `400 bad_call_kind` 挡掉。
 
 ## SSE 事件
 

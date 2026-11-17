@@ -137,4 +137,10 @@ export const api = {
       { method: 'POST', body: form },
     )
   },
+
+  requestCall: (kind: 'audio' | 'video') =>
+    request<{ ok: false; code: string; message: string }>('/api/calls', {
+      method: 'POST',
+      body: JSON.stringify({ kind }),
+    }),
 }

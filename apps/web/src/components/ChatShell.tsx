@@ -5,6 +5,7 @@ import { MessageRow } from './MessageRow'
 import { PendingVoiceRow } from './PendingVoiceRow'
 import { StickerPanel } from './StickerPanel'
 import { PlusMenu } from './PlusMenu'
+import { CallSheet } from './CallSheet'
 import { MediaViewer } from './MediaViewer'
 import { refLabel } from '../lib/preview'
 import { formatDuration } from '../lib/time'
@@ -28,6 +29,7 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
   const [stickersLoading, setStickersLoading] = useState(false)
   const [stickerError, setStickerError] = useState('')
   const [plusOpen, setPlusOpen] = useState(false)
+  const [callSheet, setCallSheet] = useState(false)
   const [viewer, setViewer] = useState<AttachmentInfo | null>(null)
   const [recording, setRecording] = useState(false)
   const [recordMs, setRecordMs] = useState(0)
@@ -539,6 +541,15 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
     }
   }
 
+  const startCall = async (kind: 'audio' | 'video') => {
+    setCallSheet(false)
+    try {
+      await api.requestCall(kind)
+    } catch (err) {
+      flash(err instanceof ApiError ? err.message : '拨不出去')
+    }
+  }
+
   return (
     <div className="chat">
       <header className="chat-header">
@@ -689,7 +700,7 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
           }}
           onCall={() => {
             setPlusOpen(false)
-            flash('通话还没做（P4）')
+            setCallSheet(true)
           }}
           onClose={() => setPlusOpen(false)}
         />
@@ -705,6 +716,13 @@ export function ChatShell({ me, onLogout }: { me: MeResult; onLogout: () => void
           onUpload={(file) => void uploadSticker(file)}
           onDelete={(id) => void removeSticker(id)}
           onClose={() => setStickerOpen(false)}
+        />
+      ) : null}
+
+      {callSheet ? (
+        <CallSheet
+          onPick={(kind) => void startCall(kind)}
+          onClose={() => setCallSheet(false)}
         />
       ) : null}
 
