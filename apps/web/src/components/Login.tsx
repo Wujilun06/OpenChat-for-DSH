@@ -36,7 +36,7 @@ export function Login({ onDone }: { onDone: () => Promise<void> }) {
           onChange={(e) => setPassword(e.target.value)}
         />
         <button type="submit" disabled={busy || password.length === 0}>
-          {busy ? '进去中…' : '进去'}
+          {busy ? '登录中…' : '登录'}
         </button>
         <p className="login-error">{error}</p>
       </form>

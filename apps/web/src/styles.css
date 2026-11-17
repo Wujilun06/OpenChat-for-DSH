@@ -155,7 +155,8 @@ button {
 .chat-title {
   position: absolute;
   left: 50%;
-  top: 50%;
+  /* 标题只在自己的 48px 栏里居中，别往状态栏那层液态玻璃底下钻 */
+  top: calc(env(safe-area-inset-top) + 24px);
   transform: translate(-50%, -50%);
   max-width: 68%;
   margin: 0;
