@@ -45,6 +45,18 @@ export interface AppConfig {
     modelDir: string
     timeoutMs: number
   }
+  /**
+   * 接 DSH：token / session 留空的话，运行时会去读 ~/.dsh/openchat-bridge.json
+   * （那个文件是 dsh-openchat-bridge 插件生成/使用的）。
+   */
+  dsh: {
+    enabled: boolean
+    baseUrl: string
+    token: string
+    session: string
+    historyLimit: number
+    mergeWindowMs: number
+  }
   /** 假鱼回声。接上 DSH 以后把它关掉。 */
   mock: {
     enabled: boolean
@@ -154,6 +166,7 @@ function normalize(value: unknown, where: string): AppConfig {
   const attachment = (v.attachment ?? {}) as Record<string, unknown>
   const media = (v.media ?? {}) as Record<string, unknown>
   const asr = (v.asr ?? {}) as Record<string, unknown>
+  const dsh = (v.dsh ?? {}) as Record<string, unknown>
   const mock = (v.mock ?? {}) as Record<string, unknown>
 
   const password = String(v.password ?? '')
@@ -207,6 +220,14 @@ function normalize(value: unknown, where: string): AppConfig {
       python: String(asr.python ?? ''),
       modelDir: String(asr.modelDir ?? ''),
       timeoutMs: clampInt(asr.timeoutMs, 5_000, 300_000, 120_000),
+    },
+    dsh: {
+      enabled: dsh.enabled === true,
+      baseUrl: String(dsh.baseUrl ?? 'http://127.0.0.1:8788').replace(/\/+$/, ''),
+      token: String(dsh.token ?? ''),
+      session: String(dsh.session ?? ''),
+      historyLimit: clampInt(dsh.historyLimit, 1, 2000, 200),
+      mergeWindowMs: clampInt(dsh.mergeWindowMs, 0, 30_000, 2000),
     },
   }
 }

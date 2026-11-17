@@ -33,6 +33,14 @@
     "modelDir": "",
     "timeoutMs": 120000
   },
+  "dsh": {
+    "enabled": false,
+    "baseUrl": "http://127.0.0.1:8788",
+    "token": "",
+    "session": "",
+    "historyLimit": 200,
+    "mergeWindowMs": 2000
+  },
   "mock": {
     "enabled": true,
     "mergeWindowMs": 2000,

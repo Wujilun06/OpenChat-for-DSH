@@ -37,6 +37,8 @@ export interface NewMessage {
   replyTo?: string | null
   source: MessageSource
   clientId?: string | null
+  /** 只有从别处导入的历史才需要指定；平时用现在的时刻。 */
+  createdAt?: number
 }
 
 const COLUMNS =
@@ -154,7 +156,10 @@ export function listSince(
  */
 export function insertMessage(db: DatabaseSync, input: NewMessage): MessageInfo {
   const id = crypto.randomUUID()
-  const now = Date.now()
+  const now =
+    typeof input.createdAt === 'number' && Number.isFinite(input.createdAt)
+      ? Math.trunc(input.createdAt)
+      : Date.now()
 
   db.exec('BEGIN IMMEDIATE')
   try {

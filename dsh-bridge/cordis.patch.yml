@@ -1,0 +1,7 @@
+# dsh-openchat-bridge bundle patch.
+#
+# 只加一行：宿主侧启动一个小 HTTP 服务（默认 127.0.0.1:8788），
+# 给 OpenChat 后端读写某一间 DSH 会话。没有客户端半边。
+- insert:
+    - id: openchat-bridge
+      name: dsh-openchat-bridge

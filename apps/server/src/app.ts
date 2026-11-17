@@ -27,6 +27,7 @@ import {
 import { Hub } from './services/hub.js'
 import { createMessage, findMessage, listBefore, listSince } from './services/messages.js'
 import { MockFish } from './services/mockFish.js'
+import { createDshBridge, type DshBridge } from './services/dshBridge.js'
 import { createVoiceService, VoiceError, type VoiceService } from './services/voice.js'
 import {
   AttachmentError,
@@ -57,6 +58,8 @@ export interface AppDeps {
   db: DatabaseSync
   /** 测试里塞假转写；平时不传，按配置自己建。 */
   voice?: VoiceService
+  /** 测试里塞假桥；平时按 config.dsh 自己建。 */
+  dsh?: DshBridge
 }
 
 interface ConversationRow {
@@ -187,6 +190,7 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
       node: process.version,
       db: 'ok',
       asr: voice.ready() ? 'ready' : 'not_installed',
+      dsh: dsh ? 'on' : 'off',
       time: Date.now(),
     }
   })
@@ -254,7 +258,13 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
   if (!convId) throw new Error('数据库里没有会话，seed 没跑成功')
 
   const hub = new Hub()
-  const mock = new MockFish({ db, hub, convId, config: config.mock })
+  const dsh = deps.dsh ?? (config.dsh.enabled ? createDshBridge({ config, db, hub, convId }) : null)
+  const mock = new MockFish({
+    db,
+    hub,
+    convId,
+    config: dsh ? { ...config.mock, enabled: false } : config.mock,
+  })
   const voice = deps.voice ?? createVoiceService(paths, config)
 
   const parseLimit = (raw: unknown, fallback: number): number => {
@@ -359,7 +369,10 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
       clientId,
     })
 
-    if (created) mock.note(kind === 'text' ? (text ?? '') : `[${kind}]`)
+    if (created) {
+      if (dsh) dsh.queue(text ?? '')
+      else mock.note(kind === 'text' ? (text ?? '') : `[${kind}]`)
+    }
     return { ok: true, message, created }
   })
 
@@ -625,7 +638,10 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
         source: 'web',
         clientId,
       })
-      if (created) mock.note('[语音]')
+      if (created) {
+        if (dsh) dsh.queue(result.text)
+        else mock.note('[语音]')
+      }
       return { ok: true, message, created }
     } catch (error) {
       if (error instanceof VoiceError) return fail(reply, error.status, error.code, error.message)
@@ -740,7 +756,10 @@ export function buildApp(deps: AppDeps, options: { logger?: boolean } = {}): Fas
   app.addHook('onClose', async () => {
     clearInterval(sweepTimer)
     mock.stop()
+    dsh?.stop()
   })
+
+  if (dsh) dsh.start()
 
   return app
 }

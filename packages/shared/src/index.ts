@@ -123,6 +123,8 @@ export interface HealthInfo {
   node: string
   db: 'ok'
   asr: 'ready' | 'not_installed'
+  /** 接 DSH 的桥开没开。 */
+  dsh?: 'on' | 'off'
   time: number
 }
 

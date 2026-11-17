@@ -25,6 +25,7 @@ const config: AppConfig = {
   attachment: { imageMaxBytes: 64 * 1024, videoMaxBytes: 64 * 1024, fileMaxBytes: 64 * 1024 },
   media: { ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' },
   asr: { enabled: false, threads: 4, python: '', modelDir: '', timeoutMs: 120000 },
+  dsh: { enabled: false, baseUrl: 'http://127.0.0.1:8788', token: '', session: '', historyLimit: 200, mergeWindowMs: 2000 },
   mock: { enabled: false, mergeWindowMs: 10, typingMs: 10, gapMs: 10 },
 }
 
