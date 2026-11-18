@@ -1,6 +1,6 @@
 /* OpenChat 的 Service Worker：只缓存「壳」，不碰 /api。 */
 
-const CACHE = 'openchat-shell-v1'
+const CACHE = 'openchat-shell-v2'
 const SHELL = '/'
 const ASSET_URL = /\/assets\/[^"']+/g
 
@@ -82,12 +82,12 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         const cache = await caches.open(CACHE)
         const cached = await cache.match(SHELL)
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 3500)
         try {
-          // 网络优先，但最多等 3.5 秒；超时先用缓存的壳把界面画出来
-          const fresh = await Promise.race([
-            fetch(request),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3500)),
-          ])
+          // 网络优先，但最多等 3.5 秒；超时先拿缓存的壳把界面画出来。
+          // 超时要 abort 掉那个请求，不能让它挂在后台占连接。
+          const fresh = await fetch(request, { signal: controller.signal })
           if (fresh && fresh.ok) {
             cache.put(SHELL, fresh.clone())
             return fresh
@@ -95,6 +95,8 @@ self.addEventListener('fetch', (event) => {
           return cached || fresh
         } catch {
           return cached || Response.error()
+        } finally {
+          clearTimeout(timer)
         }
       })(),
     )

@@ -9,6 +9,7 @@
   --oc-green: #95ec69;
   --oc-link: #576b95;
   --oc-danger: #cf3b3b;
+  --oc-accent: #07c160;
 
   color-scheme: light;
 }
@@ -54,6 +55,39 @@ button {
   min-height: 100dvh;
   color: var(--oc-sub);
   letter-spacing: 0.2em;
+}
+
+.splash-error {
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.splash-title {
+  margin: 0;
+  color: #191919;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.splash-detail {
+  margin: 0;
+  max-width: 78vw;
+  overflow-wrap: anywhere;
+  color: var(--oc-sub);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.splash-retry {
+  margin-top: 8px;
+  padding: 9px 26px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--oc-accent);
+  color: #fff;
+  font-size: 15px;
 }
 
 /* ---------- 登录 ---------- */

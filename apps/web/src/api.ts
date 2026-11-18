@@ -21,18 +21,23 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, timeoutMs = 15_000): Promise<T> {
   const headers = new Headers(init.headers)
   const isForm = init.body instanceof FormData
   if (init.body !== undefined && !isForm && !headers.has('content-type')) {
     headers.set('content-type', 'application/json')
   }
 
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
   let res: Response
   try {
-    res = await fetch(path, { ...init, headers, credentials: 'same-origin' })
+    res = await fetch(path, { ...init, headers, credentials: 'same-origin', signal: controller.signal })
   } catch {
     throw new ApiError(0, 'network', '连不上服务器，检查一下网')
+  } finally {
+    clearTimeout(timer)
   }
 
   let body: unknown = null
@@ -80,7 +85,7 @@ export interface SendMessageInput {
 
 export const api = {
   health: () => request<HealthInfo>('/api/health'),
-  me: () => request<MeResult>('/api/auth/me'),
+  me: () => request<MeResult>('/api/auth/me', {}, 10_000),
   login: (password: string) =>
     request<LoginResult>('/api/auth/login', {
       method: 'POST',
@@ -111,7 +116,7 @@ export const api = {
     return request<{ ok: true; sticker: StickerInfo }>('/api/stickers', {
       method: 'POST',
       body: form,
-    })
+    }, 120_000)
   },
 
   deleteSticker: (id: string) =>
@@ -123,7 +128,7 @@ export const api = {
     return request<{ ok: true; attachment: AttachmentInfo }>('/api/attachments', {
       method: 'POST',
       body: form,
-    })
+    }, 180_000)
   },
 
   sendVoice: (blob: Blob, input: { clientId: string; replyTo?: string | null }) => {
@@ -135,6 +140,7 @@ export const api = {
     return request<{ ok: true; message: MessageInfo; created: boolean }>(
       `/api/messages/voice?${query.toString()}`,
       { method: 'POST', body: form },
+      180_000,
     )
   },
 
